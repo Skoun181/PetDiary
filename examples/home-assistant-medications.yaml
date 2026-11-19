@@ -1,0 +1,24 @@
+# Mit vorhandener rest:-Konfiguration zusammenführen.
+# secrets.yaml:
+# petdiary_medication_url: "http://PETDIARY-SERVER:8080/api/v1/medications?days=1"
+# petdiary_authorization: "Bearer DEIN_API_TOKEN"
+rest:
+  - resource: !secret petdiary_medication_url
+    headers:
+      Authorization: !secret petdiary_authorization
+    scan_interval: 60
+    timeout: 10
+    sensor:
+      - name: "PetDiary Medikamente heute"
+        unique_id: petdiary_medications_today
+        value_template: "{{ value_json.count }}"
+        json_attributes:
+          - medications
+          - next
+          - due_count
+          - timezone
+        icon: mdi:pill
+      - name: "PetDiary Medikamente fällig"
+        unique_id: petdiary_medications_due
+        value_template: "{{ value_json.due_count }}"
+        icon: mdi:clock-alert-outline
