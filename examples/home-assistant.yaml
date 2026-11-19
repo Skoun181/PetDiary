@@ -1,0 +1,26 @@
+# In configuration.yaml übernehmen bzw. mit vorhandenem rest: zusammenführen.
+# In secrets.yaml:
+# petdiary_url: "http://PETDIARY-SERVER:8080/api/v1/reminders?days=30"
+# petdiary_authorization: "Bearer DEIN_API_TOKEN"
+# Nach Möglichkeit HTTPS verwenden.
+rest:
+  - resource: !secret petdiary_url
+    headers:
+      Authorization: !secret petdiary_authorization
+    scan_interval: 300
+    timeout: 10
+    sensor:
+      - name: "PetDiary Erinnerungen"
+        unique_id: petdiary_reminders
+        value_template: "{{ value_json.count }}"
+        json_attributes:
+          - reminders
+          - next
+          - overdue
+          - due_today
+          - as_of
+        icon: mdi:paw
+      - name: "PetDiary Überfällig"
+        unique_id: petdiary_overdue
+        value_template: "{{ value_json.overdue }}"
+        icon: mdi:calendar-alert
