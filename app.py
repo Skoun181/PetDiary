@@ -79,6 +79,9 @@ def create_app(config=None):
             for col in additions:
                 if col not in known:
                     con.execute("ALTER TABLE "+table+" ADD COLUMN "+col+" TEXT NOT NULL DEFAULT ''")
+        if "parent_id" not in {row["name"] for row in con.execute("PRAGMA table_info(records)")}:
+            con.execute("ALTER TABLE records ADD COLUMN parent_id INTEGER REFERENCES records(id) ON DELETE CASCADE")
+        con.execute("CREATE INDEX IF NOT EXISTS records_parent ON records(parent_id)")
         con.executemany("INSERT OR IGNORE INTO products(name) VALUES (?)",[(p,) for p in PRODUCTS])
         con.execute("INSERT OR IGNORE INTO app_settings VALUES ('session_secret',?)",(secrets.token_hex(32),))
         app.secret_key=con.execute("SELECT value FROM app_settings WHERE key='session_secret'").fetchone()[0]
@@ -281,7 +284,7 @@ def create_app(config=None):
 
     def medication_rows(con, start, end, pid=None):
         sql="""SELECT r.*, p.name AS pet FROM records r JOIN pets p ON p.id=r.pet_id
-               WHERE r.kind='med' AND r.duration!='' AND r.dose_times!='' AND r.day<=?"""
+               WHERE r.kind='med' AND r.duration!='' AND r.day<=?"""
         args=[end.isoformat()]
         if pid is not None:
             sql+=" AND r.pet_id=?"
@@ -295,8 +298,8 @@ def create_app(config=None):
             while current<=min(end,last):
                 day=current.isoformat()
                 for clock in r["dose_times"].split(","):
-                    moment=datetime.fromisoformat(day+"T"+clock).replace(tzinfo=tz)
-                    result.append(dict(id=f'{r["id"]}:{day}:{clock}',record_id=r["id"],pet_id=r["pet_id"],pet=r["pet"],title=r["title"],product=r["product"],dose=r["dose"],unit=r["dose_unit"],day=day,time=clock,scheduled_at=moment.isoformat(),done=(r["id"],day,clock) in checks))
+                    moment=datetime.fromisoformat(day+"T"+clock).replace(tzinfo=tz) if clock else None
+                    result.append(dict(id=f'{r["id"]}:{day}:{clock}',record_id=r["id"],entry_id=r["parent_id"] or r["id"],pet_id=r["pet_id"],pet=r["pet"],title=r["title"],product=r["product"],dose=r["dose"],unit=r["dose_unit"],day=day,time=clock,scheduled_at=moment.isoformat() if moment else None,done=(r["id"],day,clock) in checks))
                 current+=timedelta(days=1)
         return sorted(result,key=lambda r:(r["day"],r["time"],r["pet"],r["record_id"]))
 
@@ -313,8 +316,8 @@ def create_app(config=None):
             rows=medication_rows(con,start,end)
         now=datetime.now(tz)
         pending=[r for r in rows if not r["done"]]
-        future=[r for r in pending if datetime.fromisoformat(r["scheduled_at"]).timestamp()>=now.timestamp()]
-        due=[r for r in pending if datetime.fromisoformat(r["scheduled_at"]).timestamp()<=now.timestamp()]
+        future=[r for r in pending if (datetime.fromisoformat(r["scheduled_at"]).timestamp()>=now.timestamp() if r["scheduled_at"] else r["day"]>now.date().isoformat())]
+        due=[r for r in pending if (datetime.fromisoformat(r["scheduled_at"]).timestamp()<=now.timestamp() if r["scheduled_at"] else r["day"]<=now.date().isoformat())]
         return jsonify(count=len(pending),due_count=len(due),next=future[0] if future else None,medications=rows,timezone=app.config["TZ"])
 
     @app.post("/medications/<int:rid>/check")
@@ -333,7 +336,7 @@ def create_app(config=None):
             elif request.form.get("action")=="mark":
                 con.execute("INSERT OR IGNORE INTO dose_checks VALUES (?,?,?)",(rid,day.isoformat(),clock))
             else: abort(400)
-        return redirect(url_for("home",week=request.form.get("week",day.isoformat()),pet=request.form.get("pet","")),303)
+        return redirect(url_for("home",week=request.form.get("week",day.isoformat()),pet=request.form.get("pet",""))+"#med-calendar",303)
 
     @app.get("/")
     def home():
@@ -416,7 +419,12 @@ def create_app(config=None):
             pet=item(con,"pets",pid)
             pet["has_photo"]=bool(con.execute("SELECT 1 FROM pet_photos WHERE pet_id=?",(pid,)).fetchone())
             rows=con.execute("SELECT * FROM records WHERE pet_id=? ORDER BY day DESC,id DESC",(pid,))
-            records=[dict(r) for r in rows]
+            all_records=[dict(r) for r in rows]
+            records=[r for r in all_records if r["parent_id"] is None]
+            children={}
+            for r in all_records:
+                if r["parent_id"] is not None: children.setdefault(r["parent_id"],[]).append(r)
+            for r in records: r["medicines"]=sorted(children.get(r["id"],[]),key=lambda m:m["id"])
             files=con.execute("SELECT a.id,a.record_id,a.name,a.mime FROM attachments a JOIN records r ON r.id=a.record_id WHERE r.pet_id=? ORDER BY a.id",(pid,))
             groups={}
             for f in files: groups.setdefault(f["record_id"],[]).append(dict(f))
@@ -424,7 +432,7 @@ def create_app(config=None):
         if tab=="passport":
             records=[r for r in records if r["kind"] in ("vaccine","titer","parasite","worm")]
         elif category in CATEGORIES:
-            records=[r for r in records if r["kind"]==category]
+            records=[r for r in records if r["kind"]==category or (category=="med" and r["medicines"])]
         return page("pet",pet=pet,records=records,tab=tab,category=category)
 
     def read_files():
@@ -444,6 +452,60 @@ def create_app(config=None):
             uploads.append((name,mime,b))
         return uploads
 
+    def validate_med(d, clocks, mode=None):
+        if mode is None:
+            mode="plan" if d.get("duration") or clocks else "given"
+        if mode not in ("given","plan"): raise ValueError("Ungültige Medikamentenart.")
+        if (d.get("dose") or d.get("dose_unit") or mode=="plan") and not d.get("product"):
+            raise ValueError("Bitte ein Präparat eintragen.")
+        if d.get("dose"):
+            dose=float(d["dose"].replace(",","."))
+            if not 0<dose<1000000: raise ValueError("Ungültige Menge.")
+            d["dose"]=d["dose"].replace(",",".")
+        if mode=="given":
+            d["duration"]=d["dose_times"]=""
+            return
+        if not all(d.get(k) for k in ("product","dose","dose_unit","duration")):
+            raise ValueError("Für einen Medikamentenplan Präparat, Menge, Einheit und Tage eintragen. Uhrzeiten sind optional.")
+        duration=int(d["duration"])
+        if not 1<=duration<=3660: raise ValueError("Kurdauer muss 1–3660 Tage betragen.")
+        if len(clocks)>12: raise ValueError("Maximal 12 Uhrzeiten pro Tag.")
+        normalized=sorted({datetime.strptime(c,"%H:%M").strftime("%H:%M") for c in clocks})
+        date.fromisoformat(d["day"])+timedelta(days=duration-1)
+        d["duration"]=str(duration)
+        d["dose_times"]=",".join(normalized)
+
+    def extra_med_forms():
+        keys=request.form.getlist("extra_key")
+        if len(keys)>12 or len(set(keys))!=len(keys) or any(not k.isdecimal() or len(k)>3 for k in keys):
+            raise ValueError("Maximal zwölf zusätzliche Präparate pro Eintrag.")
+        result=[]
+        for key in keys:
+            prefix="extra_"+key+"_"
+            d={k:request.form.get(prefix+k,"").strip() for k in ("id","product","product_custom","batch","day","dose","dose_unit","duration","mode")}
+            d["clocks"]=[v.strip() for v in request.form.getlist(prefix+"clock") if v.strip()]
+            d["dose_times"]=",".join(d["clocks"])
+            result.append(d)
+        return result
+
+    def validate_extras(raw, parent, existing):
+        valid=[]
+        seen=set()
+        for m in raw:
+            if any(len(str(m.get(k,"")))>300 for k in ("product","product_custom","batch","day","dose","dose_unit","duration","id")):
+                raise ValueError("Medikamenteneingabe zu lang.")
+            mid=int(m["id"]) if m["id"] else None
+            if mid is not None and (mid not in existing or mid in seen): raise ValueError("Ungültiges zugeordnetes Medikament.")
+            if mid is not None: seen.add(mid)
+            product=m["product_custom"] or m["product"]
+            if not product: raise ValueError("Bitte für jedes hinzugefügte Medikament ein Präparat eingeben oder den Block entfernen.")
+            day=date.fromisoformat(m["day"] or parent["day"]).isoformat()
+            d={k:"" for k in RECORD_FIELDS}
+            d.update(kind="med",title=product,day=day,vet=parent["vet"],product=product,batch=m["batch"],dose=m["dose"],dose_unit=m["dose_unit"],duration=m["duration"])
+            validate_med(d,m["clocks"],m["mode"] or "given")
+            valid.append((mid,d))
+        return valid
+
     @app.route("/pets/<int:pid>/records/new",methods=["GET","POST"])
     @app.route("/pets/<int:pid>/records/<int:rid>/edit",methods=["GET","POST"])
     def record_edit(pid,rid=None):
@@ -451,9 +513,15 @@ def create_app(config=None):
             pet=item(con,"pets",pid)
             record=item(con,"records",rid) if rid is not None else {"day":today().isoformat(),"kind":request.args.get("kind","visit")}
             if rid is not None and record["pet_id"]!=pid: abort(404)
+            if record.get("parent_id") is not None:
+                return redirect(url_for("record_edit",pid=pid,rid=record["parent_id"]),303)
+            existing={r["id"]:dict(r) for r in con.execute("SELECT * FROM records WHERE parent_id=? ORDER BY id",(rid,))}
+            extras=list(existing.values())
             files=[dict(f) for f in con.execute("SELECT id,name,mime FROM attachments WHERE record_id=?",(rid,))]
             if request.method=="POST":
                 try:
+                    raw=extra_med_forms() if "extra_present" in request.form else None
+                    if raw is not None: extras=raw
                     d=values(RECORD_FIELDS,("day","valid_from","valid_until","due"))
                     custom=request.form.get("product_custom","").strip()
                     if len(custom)>300: raise ValueError("Präparatbezeichnung maximal 300 Zeichen.")
@@ -472,21 +540,12 @@ def create_app(config=None):
                         clocks=[v.strip() for v in request.form.getlist("dose_clock") if v.strip()]
                         if not clocks and d["dose_times"]:
                             clocks=[v.strip() for v in d["dose_times"].split(",") if v.strip()]
-                        if d["duration"] or clocks or d["dose"] or d["dose_unit"]:
-                            if not d["product"] or not d["dose"] or not d["dose_unit"] or not clocks or not d["duration"]:
-                                raise ValueError("Für einen Medikamentenplan Präparat, Menge, Einheit, Tage und mindestens eine Uhrzeit eintragen.")
-                            dose=float(d["dose"].replace(",","."))
-                            if not 0<dose<1000000: raise ValueError("Ungültige Menge.")
-                            duration=int(d["duration"])
-                            if not 1<=duration<=3660: raise ValueError("Kurdauer muss 1–3660 Tage betragen.")
-                            if len(clocks)>12: raise ValueError("Maximal 12 Uhrzeiten pro Tag.")
-                            normalized=sorted({datetime.strptime(c,"%H:%M").strftime("%H:%M") for c in clocks})
-                            date.fromisoformat(d["day"])+timedelta(days=duration-1)
-                            d["duration"]=str(duration)
-                            d["dose_times"]=",".join(normalized)
-                            d["dose"]=d["dose"].replace(",",".")
+                        validate_med(d,clocks,request.form.get("med_mode"))
                     else:
                         for k in ("dose","dose_unit","duration","dose_times"): d[k]=""
+                    planned=validate_extras(raw,d,existing) if raw is not None else None
+                    if planned and d["kind"] not in ("visit","exam","med"):
+                        raise ValueError("Zusätzliche Medikamente sind bei Terminen, Untersuchungen und Medikamenteneinträgen möglich.")
                     uploads=read_files()
                     if rid is None:
                         rid=con.execute("INSERT INTO records (pet_id,"+",".join(RECORD_FIELDS)+") VALUES ("+",".join("?" for _ in range(len(RECORD_FIELDS)+1))+")",[pid,*d.values()]).lastrowid
@@ -497,13 +556,25 @@ def create_app(config=None):
                         con.execute("INSERT OR IGNORE INTO products(name) VALUES (?)",(d["product"],))
                     if record.get("id") and any(record.get(k,"")!=d[k] for k in ("kind","day","duration","dose_times","product","dose","dose_unit")):
                         con.execute("DELETE FROM dose_checks WHERE record_id=?",(rid,))
+                    if planned is not None:
+                        retained={mid for mid,_ in planned if mid is not None}
+                        for mid in existing.keys()-retained:
+                            con.execute("DELETE FROM records WHERE id=? AND parent_id=?",(mid,rid))
+                        for mid,med in planned:
+                            if mid is None:
+                                con.execute("INSERT INTO records (pet_id,parent_id,"+",".join(RECORD_FIELDS)+") VALUES ("+",".join("?" for _ in range(len(RECORD_FIELDS)+2))+")",[pid,rid,*med.values()])
+                            else:
+                                con.execute("UPDATE records SET "+",".join(k+"=?" for k in RECORD_FIELDS)+" WHERE id=? AND parent_id=?",[*med.values(),mid,rid])
+                                if any(existing[mid][k]!=med[k] for k in ("day","duration","dose_times","product","dose","dose_unit")):
+                                    con.execute("DELETE FROM dose_checks WHERE record_id=?",(mid,))
+                            con.execute("INSERT OR IGNORE INTO products(name) VALUES (?)",(med["product"],))
                     con.executemany("INSERT INTO attachments(record_id,name,mime,data) VALUES (?,?,?,?)",[(rid,*f) for f in uploads])
                     return redirect(url_for("pet_detail",pid=pid),303)
                 except (ValueError,OverflowError) as e:
                     flash(str(e),"error")
                     record={**record,**request.form.to_dict(),"dose_times":",".join(request.form.getlist("dose_clock")) or request.form.get("dose_times","")}
             products=[r[0] for r in con.execute("SELECT name FROM products ORDER BY name COLLATE NOCASE")]
-            return page("record_edit",pet=pet,record=record,rid=rid,files=files,products=products)
+            return page("record_edit",pet=pet,record=record,rid=rid,files=files,products=products,extras=extras)
 
     @app.post("/records/<int:rid>/delete")
     def record_delete(rid):

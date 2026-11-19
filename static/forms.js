@@ -133,7 +133,7 @@ if(med&&kind){
   const refresh=()=>{
     const medication=kind.value==="med";
     med.hidden=!medication;
-    if(dateLabel)dateLabel.textContent=medication?"Behandlungsbeginn *":kind.value==="vaccine"?"Impfdatum *":"Datum *";
+    if(dateLabel)dateLabel.textContent=medication?"Datum / Behandlungsbeginn *":kind.value==="vaccine"?"Impfdatum *":"Datum *";
     document.querySelectorAll("[data-record-kinds]").forEach(section=>{
       section.hidden=!section.dataset.recordKinds.split(" ").includes(kind.value)&&section.dataset.keep!=="yes";
     });
@@ -152,4 +152,56 @@ if(med&&kind){
     if(!med.querySelector(".clock-field[hidden]"))add.hidden=true;
   });
   if(!med.querySelector(".clock-field[hidden]"))add.hidden=true;
+}
+
+const primaryMode=document.getElementById("med-mode");
+const primaryPlan=document.getElementById("primary-plan");
+if(primaryMode&&primaryPlan){
+  const refresh=()=>{primaryPlan.hidden=primaryMode.value!=="plan";};
+  primaryMode.addEventListener("change",refresh);
+  refresh();
+}
+const extraRoot=document.getElementById("extra-med-fields");
+if(extraRoot){
+  const cards=Array.from(extraRoot.querySelectorAll("[data-extra-med]"));
+  const addMed=document.getElementById("add-med");
+  const parentDate=document.querySelector('input[name="day"]');
+  const addState=()=>{addMed.hidden=!cards.some(card=>card.hidden);};
+  function clearCard(card){
+    card.querySelectorAll("input[name]").forEach(input=>{
+      if(input.name!=="extra_key")input.value="";
+    });
+    const mode=card.querySelector("[data-extra-mode]");
+    mode.value="given";mode.dispatchEvent(new Event("change",{bubbles:true}));
+    const clocks=Array.from(card.querySelectorAll(".clock-field"));
+    clocks.forEach((label,i)=>{label.hidden=i>=3;});
+    card.querySelector("[data-extra-clock]").hidden=false;
+  }
+  for(const card of cards){
+    const mode=card.querySelector("[data-extra-mode]");
+    const plan=card.querySelector("[data-extra-plan]");
+    const more=card.querySelector("[data-extra-clock]");
+    const refresh=()=>{plan.hidden=mode.value!=="plan";};
+    mode.addEventListener("change",refresh);refresh();
+    more.hidden=!card.querySelector(".clock-field[hidden]");
+    more.addEventListener("click",()=>{
+      const next=card.querySelector(".clock-field[hidden]");
+      if(next){next.hidden=false;next.querySelector("input").focus();}
+      more.hidden=!card.querySelector(".clock-field[hidden]");
+    });
+    card.querySelector("[data-remove-med]").addEventListener("click",()=>{
+      const id=card.querySelector('input[name$="_id"]').value;
+      if(id&&!window.confirm("Dieses Medikament beim Speichern aus dem Eintrag entfernen? Auch seine Gabe-Häkchen werden gelöscht."))return;
+      clearCard(card);card.hidden=true;card.disabled=true;addState();
+      addMed.focus();
+    });
+  }
+  addMed.addEventListener("click",()=>{
+    const card=cards.find(c=>c.hidden);
+    if(!card)return;
+    clearCard(card);card.querySelector("[data-extra-day]").value=parentDate?.value||"";
+    card.hidden=false;card.disabled=false;addState();
+    card.querySelector('input[name$="_product"]').focus();
+  });
+  addState();
 }

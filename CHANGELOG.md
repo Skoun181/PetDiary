@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.2 – Medikamentengaben
+
+- Bereits verabreichte Medikamente ohne Uhrzeit oder Kurdauer dokumentieren.
+- Mehrere Medikamente pro Termin, Untersuchung oder Medikamenteneintrag; jeder zusätzliche Block hat eigene Angaben und optionalen Plan.
+- Zeitlose Pläne erzeugen eine Gabe pro Tag ohne feste Uhrzeit; API liefert scheduled_at: null und time: leer.
+- Bestehende Pläne und Häkchen bleiben bei technischen Migrationen erhalten. Geänderte oder gelöschte Pläne betreffen nur deren Häkchen.
+
 ## 0.0.1 – erste Vorabversion
 
 - Lokale Browser-Ersteinrichtung, Anmeldung, Kontoeinstellungen und API-Token-Verwaltung ohne Pflicht-.env.

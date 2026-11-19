@@ -1,4 +1,4 @@
-# PetDiary 0.0.1 – Bedienungsanleitung
+# PetDiary 0.0.2 – Bedienungsanleitung
 
 [Zurück zur README](../README.md) · [Passwort zurücksetzen](PASSWORD_RESET.md)
 
@@ -78,7 +78,9 @@ Beispiel: Der Nachweis ist bis 15.12.2027 gültig, erinnert werden möchtest du 
 
 Der Bereich umfasst auch Vorsorgeeinträge wie Entwurmungen, Parasitenbehandlungen und Tollwut-Antikörpertests. Er ist eine private Abschrift und kein amtlicher EU-Heimtierausweis, keine tierärztliche Bescheinigung und kein Ersatz für erforderliche Originaldokumente bei Reisen.
 
-## 5. Medikamentenplan und Kalender
+## 5. Medikamentengaben und Kalender
+
+Bei einem Termin oder einer Untersuchung kannst du über **+ Medikament hinzufügen** mehrere Präparate in demselben Eintrag speichern. Bei Kategorie Medikament gibt es ein Hauptpräparat und weitere Medikamentenblöcke. Wähle bei jedem Präparat **Bereits verabreicht**, wenn es direkt in der Praxis gegeben wurde: Uhrzeit und Dauer sind dann nicht nötig; Menge und Einheit sind optional. Es entsteht kein offener Kalendereintrag. Wähle für die weitere Behandlung **Medikamentenplan anlegen**. Jedes zusätzliche Präparat hat sein eigenes Datum, seine Menge, Einheit, Dauer und optional bis zu zwölf Uhrzeiten. Ohne Uhrzeit wird eine tägliche Gabe ohne feste Uhrzeit erstellt. Die Gabe kann trotzdem einzeln abgehakt werden.
 
 ![Illustration eines Medikamentenplans](images/medikamentenplan.svg)
 
@@ -86,10 +88,10 @@ Der Bereich umfasst auch Vorsorgeeinträge wie Entwurmungen, Parasitenbehandlung
 2. Erfasse den Behandlungsbeginn und einen Titel.
 3. Suche das konkrete Präparat einschließlich Stärke. Fehlt es, nutze die eigene genaue Präparatbezeichnung. Sie überschreibt die Auswahl und wird künftig vorgeschlagen.
 4. Gib die vom Tierarzt verordnete Menge je Gabe, Einheit und Behandlungsdauer in Tagen an.
-5. Trage die tatsächlichen Uhrzeiten ein. Über **+ Weitere Uhrzeit** sind bis zu zwölf Zeiten pro Tag möglich.
+5. Trage die tatsächlichen Uhrzeiten ein, falls vorgegeben. Ohne Uhrzeit erscheint eine Gabe pro Tag. Über **+ Weitere Uhrzeit** sind bis zu zwölf Zeiten pro Tag möglich.
 6. Speichere. Der Wochenkalender erzeugt die Gaben vom ersten Tag bis einschließlich des letzten Behandlungstags.
 
-Ein Plan mit 14 Tagen und zwei eingetragenen Uhrzeiten ergibt 28 Kalendereinträge. Das ist eine reine Planungsrechnung, keine medizinische Empfehlung. Unterschiedliche Mengen, wechselnde Zeiten oder Unterbrechungen als getrennte Pläne abbilden. Derzeit unterstützt ein Plan identische tägliche Zeiten und Mengen für 1–3660 Tage. Für Dauermedikation müssen Pläne bei Bedarf verlängert werden.
+Ein Plan mit 14 Tagen und zwei eingetragenen Uhrzeiten ergibt 28 Kalendereinträge. Das ist eine reine Planungsrechnung, keine medizinische Empfehlung. Unterschiedliche Mengen, wechselnde Zeiten oder Unterbrechungen als getrennte Pläne abbilden. Derzeit unterstützt ein Plan identische tägliche Zeiten (oder eine Gabe ohne Uhrzeit) und Mengen für 1–3660 Tage. Für Dauermedikation müssen Pläne bei Bedarf verlängert werden.
 
 Im Dashboard kannst du die Woche wechseln und nach Tier filtern. Markiere jede tatsächliche Gabe als gegeben. Ein Häkchen kann rückgängig gemacht werden. Änderungen am Plan (Präparat, Menge, Start, Dauer oder Uhrzeiten) setzen die bisherigen Häkchen dieses Plans zurück. Ändere abgeschlossene Verläufe daher nur bewusst.
 
@@ -119,7 +121,7 @@ petdiary_authorization: "Bearer DEIN_TOKEN"
 5. HA-Konfiguration prüfen und neu laden bzw. neu starten. Über **Entwicklerwerkzeuge → Zustände** die tatsächlich erzeugten Entity-IDs überprüfen.
 6. Die [Dashboard-Karte](../examples/home-assistant-card.yaml) als manuelle Markdown-Karte hinzufügen und Entity-IDs ggf. ändern.
 
-Die API ist lesend. Datumsfälligkeiten sind in der Zeitzone des Servers, standardmäßig Europe/Berlin; Medikamentenzeiten enthalten einen Offset. Die Medikamenten-API liefert nur das gewählte Zeitfenster. Eine HA-Benachrichtigungsautomation muss separat angelegt werden. PetDiary verschickt keine eigenen Push-Nachrichten. Verlass dich bei medizinisch kritischen Gaben nicht auf eine einzige Polling-Automation.
+Die API ist lesend. Datumsfälligkeiten sind in der Zeitzone des Servers, standardmäßig Europe/Berlin; Medikamentenzeiten enthalten einen Offset; ohne Uhrzeit liefert die API time als leeren String, scheduled_at als null und entry_id als zugehörigen Akteneintrag. Die Medikamenten-API liefert nur das gewählte Zeitfenster. Eine HA-Benachrichtigungsautomation muss separat angelegt werden. PetDiary verschickt keine eigenen Push-Nachrichten. Verlass dich bei medizinisch kritischen Gaben nicht auf eine einzige Polling-Automation.
 
 ## 8. Einstellungen und Wartung
 

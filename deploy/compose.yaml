@@ -1,7 +1,7 @@
 # Requires a published registry image. See README before using.
 services:
   petdiary:
-    image: ghcr.io/skoun181/petdiary:0.0.1
+    image: skoun181/petdiary:latest
     container_name: petdiary
     restart: unless-stopped
     ports:

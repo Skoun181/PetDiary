@@ -21,3 +21,5 @@ h1,h2,h3,p{overflow-wrap:anywhere}h1{font-size:32px;line-height:1.2;letter-spaci
 .combo-info{padding:10px 12px;font-size:12px;color:#627e74}
 #med-reminder{padding:12px 16px;border:1px solid #d4e6de;border-radius:12px;margin:16px 0;background:#f6f9f6}
 #med-reminder summary{cursor:pointer;font-weight:600;color:#087D66}
+
+.extra-med-card{border:1px solid #c7e0d5;border-radius:12px;padding:16px;margin:12px 0;background:#f7fbf8;min-width:0}.extra-med-card .section-title{margin-top:0}.extra-med-card h3{margin:0}.med-summary{margin:12px 0;border:1px solid #d5e7df;border-radius:12px;padding:12px;background:#f7fbf8}.med-summary h4{margin:0 0 8px}.med-summary-row{display:grid;gap:3px;padding:8px 0;border-top:1px solid #d5e7df}.extra-med-card[hidden]{display:none!important}
