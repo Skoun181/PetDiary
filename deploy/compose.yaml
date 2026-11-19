@@ -1,0 +1,20 @@
+# Requires a published registry image. See README before using.
+services:
+  petdiary:
+    image: ghcr.io/skoun181/petdiary:0.0.1
+    container_name: petdiary
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - petdiary-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    init: true
+volumes:
+  petdiary-data:
