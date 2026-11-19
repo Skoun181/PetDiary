@@ -441,3 +441,22 @@ PRODUCTS = [
   "Zolvix",
   "Zycortal"
 ]
+
+# Verified product variants; strength is product identity, not dosage.
+# Sources: EU Union Product Database https://medicines.health.europa.eu/veterinary/
+PRODUCTS += [
+  "Milpro 2,5 mg/25 mg – Filmtabletten für kleine Hunde und Welpen",
+  "Milpro 12,5 mg/125 mg – Filmtabletten für Hunde",
+  "Milpro 4 mg/10 mg – Filmtabletten für kleine Katzen und Katzenwelpen",
+  "Milpro 16 mg/40 mg – Filmtabletten für Katzen",
+  "Milbemax 4 mg/10 mg – Filmtabletten für kleine Katzen und Katzenwelpen",
+  "Milbemax 16 mg/40 mg – Filmtabletten für Katzen",
+  "Milbemax 2,5 mg/25 mg – Tabletten für kleine Hunde und Welpen",
+  "Milbemax 2,5 mg/25 mg – Kautabletten für kleine Hunde und Welpen",
+  "Apoquel 3,6 mg – Filmtabletten für Hunde",
+  "Apoquel 5,4 mg – Filmtabletten für Hunde",
+  "Apoquel 3,6 mg – Kautabletten für Hunde",
+  "Metacam 0,5 mg/ml – Suspension zum Eingeben für Katzen und Meerschweinchen",
+  "Metacam 1,5 mg/ml – Suspension zum Eingeben für Hunde",
+  "Metacam 0,5 mg/ml – Suspension zum Eingeben für Hunde"
+]
