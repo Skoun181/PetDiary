@@ -99,5 +99,42 @@ class PetDiaryTest(unittest.TestCase):
         self.assertEqual(self.post("/login",username="admin",password="wrong").status_code,401)
         self.assertEqual(self.post("/login",username="admin",password=self.password).location,"/")
 
+    def test_profile_suggestions_and_photo(self):
+        png=base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jR1sAAAAASUVORK5CYII=")
+        r=self.post("/pets/new",name="Custom",species="Eigene Tierart",breed="Eigene Rasse",color="Eigene Farbe",
+                    sex="Eigene Angabe",features="Weißer Fleck",chip_location="Eigene Position",
+                    tattoo_location="Eigene Tattoo-Position",photo=(io.BytesIO(png),"photo.png"))
+        self.assertEqual(r.status_code,303)
+        p=r.location
+        self.assertEqual(self.client.get(p+"/photo").data,png)
+        self.assertEqual(self.app.test_client().get(p+"/photo").location,"/login")
+        self.assertIn("Eigene Rasse".encode(),self.client.get(p+"/edit").data)
+        self.assertIn("Weißer Fleck".encode(),self.client.get(p+"/edit").data)
+        self.assertEqual(self.post(p+"/edit",name="Custom",species="Eigene Tierart",remove_photo="yes").status_code,303)
+        self.assertEqual(self.client.get(p+"/photo").status_code,404)
+
+    def test_medication_schedule_and_checks(self):
+        p=self.pet("Milo")
+        self.pet("Luna")
+        day="2026-12-01"
+        r=self.post(p+"/records/new",kind="med",title="Testplan",day=day,product="Eigenes Präparat",
+                    dose="0,5",dose_unit="ml",duration="14",dose_clock=["08:00","20:00"])
+        self.assertEqual(r.status_code,303)
+        url="/api/v1/medications?start="+day+"&days=14"
+        result=self.client.get(url,headers=self.api).get_json()
+        self.assertEqual(result["count"],28)
+        self.assertEqual(result["medications"][0]["pet"],"Milo")
+        self.assertEqual(result["medications"][-1]["day"],"2026-12-14")
+        rid=result["medications"][0]["record_id"]
+        self.assertIn("Eigenes Präparat".encode(),self.client.get(p+"/records/new").data)
+        self.assertIn("Eigenes Präparat".encode(),self.client.get("/?week="+day).data)
+        self.assertEqual(self.post(f"/medications/{rid}/check",day=day,clock="08:00",action="mark").status_code,303)
+        self.assertEqual(self.client.get(url,headers=self.api).get_json()["count"],27)
+        self.assertEqual(self.post(f"/medications/{rid}/check",day=day,clock="08:00",action="undo").status_code,303)
+        self.assertEqual(self.client.get(url,headers=self.api).get_json()["count"],28)
+        self.assertEqual(self.post(f"/medications/{rid}/check",day=day,clock="09:00",action="mark").status_code,400)
+        self.assertEqual(self.client.get(url).status_code,401)
+        self.assertEqual(self.client.get("/api/v1/medications?days=32",headers=self.api).status_code,400)
+
 if __name__=="__main__":
     unittest.main()
