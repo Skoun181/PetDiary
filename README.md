@@ -1,11 +1,11 @@
-# 🐾 PetDiary 0.0.1
+# 🐾 PetDiary 0.0.2
 
 **Self-hosted · Docker · SQLite · Home Assistant**
 
 
 Private, ressourcenschonende Tiergesundheitsakte für den eigenen Docker-Server. Keine Cloud, kein JavaScript-Framework, keine zusätzliche Datenbank. Deutschsprachige Weboberfläche in Mintgrün und Petrol, inspiriert von modernen Tiergesundheits-Apps.
 
-**Status:** erste Vorabversion 0.0.1 im Quellcode; Docker-Build, Integrationstests und Registry-Image noch zu verifizieren. Ein lokales Administratorkonto pro Installation; keine Mehrbenutzerverwaltung.
+**Status:** Vorabversion 0.0.2 im Quellcode; Docker-Build, Integrationstests und Registry-Image noch zu verifizieren. Ein lokales Administratorkonto pro Installation; keine Mehrbenutzerverwaltung.
 
 [📖 Bebilderte Bedienungsanleitung](docs/USER_GUIDE.md) · [🔑 Passwort zurücksetzen](docs/PASSWORD_RESET.md) · [Änderungen](CHANGELOG.md)
 
@@ -31,7 +31,7 @@ Der digitale Impfpass ist eine private Abschrift, keine amtliche Ausstellung und
 - Eigene gestaltete, suchbare Vorschlagslisten mit Freitext: Tierart, passende Rassen, Geschlecht, Fellfarbe, Chip- und Tätowierungsposition; eigenes Merkmale-Feld.
 - Eigene Profilbilder (JPEG, PNG oder WebP, maximal 5 MB), lokal in SQLite gespeichert.
 - Lokaler Präparate-Startkatalog (keine vollständige oder amtlich abgeglichene Arzneimitteldatenbank). Eigene Präparate werden bei gespeichertem Eintrag zur Vorschlagsliste hinzugefügt. Geprüfte Varianten unter anderem für Milpro, Milbemax, Apoquel und Metacam ergänzen den Startkatalog. Die genaue eigene Präparatbezeichnung kann separat eingegeben werden; sie ersetzt beim Speichern die Auswahl. Name allein sagt nichts über Zulassung, Eignung oder Dosierung aus. Offizielle Recherche: [EU-Produktdatenbank](https://medicines.health.europa.eu/veterinary/de).
-- Kategorie Medikament: Präparat, Menge je Gabe, Einheit, Startdatum, Anzahl Tage (1–3660), bis zu zwölf Uhrzeiten pro Tag. Alle Tage und Uhrzeiten wiederholen sich gleich; unterschiedliche Mengen als getrennte Pläne dokumentieren. Keine automatisch vorgeschlagene Dosierung.
+- Kategorie Medikament: bereits verabreichte Einzelgabe ohne Pflicht-Uhrzeit oder Kurdauer, optional mit Menge und Einheit. Bei Termin, Untersuchung oder Medikamenteneintrag können bis zu zwölf weitere Präparate mit individuellen Daten und Plänen hinzugefügt werden. Ein Medikamentenplan benötigt Präparat, Menge, Einheit, Startdatum und 1–3660 Tage; bis zu zwölf Uhrzeiten pro Tag sind optional. Ohne Uhrzeit wird eine tägliche Gabe ohne feste Uhrzeit erzeugt. Alle Tage und Uhrzeiten wiederholen sich gleich; unterschiedliche Mengen als getrennte Pläne dokumentieren. Keine automatisch vorgeschlagene Dosierung.
 - Wochenkalender im Dashboard, nach Tier filterbar, einzelne Gaben als gegeben markieren bzw. wieder öffnen. Änderungen des Plans setzen dessen bisherige Häkchen zurück.
 - Bestehende Datenbanken werden beim Start um die neuen Felder und Tabellen ergänzt. Vor Update Backup erstellen.
 
@@ -39,11 +39,11 @@ Bei Impfungen bedeutet Gültig bis das dokumentierte Ende des Impfschutzes bzw. 
 
 ### Home Assistant – Medikamentenplan
 
-GET /api/v1/medications?days=7 liefert geplante Gaben ab dem heutigen Tag (optional start=YYYY-MM-DD; days 1–31). Nutzt denselben Bearer-Token wie die Erinnerungs-API. Antwortfelder: count (offene Gaben im Fenster), due_count (bereits fällige offene Gaben im Fenster), next (nächste offene zukünftige Gabe oder null), medications (Liste mit stabiler id, record_id, pet_id, pet, title, product, dose, unit, day, time, scheduled_at mit Zeitzonenoffset, done), timezone. Zeitumstellung: Uhrzeiten werden als lokale Kalenderzeit gespeichert, bei mehrdeutigen Zeiten gilt die erste Stunde; Sonderfälle bitte manuell prüfen. Eine Beispiel-REST-Konfiguration liegt unter examples/home-assistant-medications.yaml. Push-Automationen sind noch nicht Bestandteil der Anwendung.
+GET /api/v1/medications?days=7 liefert geplante Gaben ab dem heutigen Tag (optional start=YYYY-MM-DD; days 1–31). Nutzt denselben Bearer-Token wie die Erinnerungs-API. Antwortfelder: count (offene Gaben im Fenster), due_count (bereits fällige offene Gaben im Fenster), next (nächste offene zukünftige Gabe oder null), medications (Liste mit stabiler id, record_id, pet_id, pet, title, product, dose, unit, day, time, scheduled_at mit Zeitzonenoffset (null ohne feste Uhrzeit), entry_id (zugehöriger Akteneintrag), done), timezone. Zeitumstellung: Uhrzeiten werden als lokale Kalenderzeit gespeichert, bei mehrdeutigen Zeiten gilt die erste Stunde; Sonderfälle bitte manuell prüfen. Eine Beispiel-REST-Konfiguration liegt unter examples/home-assistant-medications.yaml. Push-Automationen sind noch nicht Bestandteil der Anwendung.
 
 ## Installation
 
-Voraussetzungen: Docker Engine, Docker Compose v2 bei Compose-Installationen, freier Port 8080. Kein externer Datenbankdienst und keine Pflicht-.env. Die Erstkonfiguration erfolgt im Browser. Der Quellcode ist derzeit privat; Git-Downloads erfordern gültigen GitHub-Zugriff.
+Voraussetzungen: Docker Engine, Docker Compose v2 bei Compose-Installationen, freier Port 8080. Kein externer Datenbankdienst und keine Pflicht-.env. Die Erstkonfiguration erfolgt im Browser. Der Quellcode ist öffentlich.
 
 ### A. Aus dem Git-Repository installieren (sofort verfügbar)
 
@@ -68,14 +68,14 @@ Die mitgelieferte [compose.yaml](compose.yaml) baut das Image lokal. Sie verwend
 
 ### B. Nur Docker Compose YAML (nach Registry-Veröffentlichung)
 
-**Status:** Das folgende Registry-Image ist eine vorbereitete Zieladresse, noch nicht veröffentlicht oder verifiziert. Bis dahin Methode A verwenden. Falls der Maintainer das Paket privat veröffentlicht, zuerst mit berechtigtem GitHub-Token am Registry-Host anmelden; bei einem bewusst öffentlich freigegebenen Paket entfällt dies.
+**Status:** Das folgende Registry-Image ist eine vorbereitete Zieladresse, noch nicht veröffentlicht oder verifiziert. Bis dahin Methode A verwenden. Falls der Maintainer das Paket privat veröffentlicht, zuerst mit berechtigtem Docker-Hub-Token am Registry-Host anmelden; bei einem bewusst öffentlich freigegebenen Paket entfällt dies.
 
 Erstelle eine Datei `docker-compose.yaml` mit dem Inhalt der [Stack-Vorlage](deploy/compose.yaml):
 
 ```yaml
 services:
   petdiary:
-    image: ghcr.io/skoun181/petdiary:0.0.1
+    image: skoun181/petdiary:latest
     container_name: petdiary
     restart: unless-stopped
     ports:
@@ -101,12 +101,12 @@ docker compose up -d
 ### C. Docker Pull / Docker Run (nach Registry-Veröffentlichung)
 
 ```sh
-docker pull ghcr.io/skoun181/petdiary:0.0.1
+docker pull skoun181/petdiary:latest
 docker run -d --name petdiary --restart unless-stopped \
   -p 8080:8080 -v petdiary-data:/data \
   --read-only --tmpfs /tmp:size=64m,mode=1777 \
   --cap-drop ALL --security-opt no-new-privileges:true --init \
-  ghcr.io/skoun181/petdiary:0.0.1
+  skoun181/petdiary:latest
 ```
 
 Das Pull-Kommando lädt nur das Image, startet aber keinen Container. Verwende die Run-Anweisung für den Start. Nicht parallel zur Compose-Installation ausführen; Containername und Port würden kollidieren.
@@ -120,7 +120,7 @@ Das Pull-Kommando lädt nur das Image, startet aber keinen Container. Verwende d
 3. Stackname `petdiary` eingeben. Inhalt der [Stack-Vorlage](deploy/compose.yaml) einfügen und die Image-Zeile auf `image: petdiary:local` ändern. Kein erzwungenes erneutes Pull aktivieren.
 4. **Deploy the stack**. Im Browser Port 8080 aufrufen.
 
-**Nach Registry-Veröffentlichung:** Schritte 2–4 mit unveränderter Stack-Vorlage; vorher ggf. die private GHCR-Registry in Portainer konfigurieren.
+**Nach Registry-Veröffentlichung:** Schritte 2–4 mit unveränderter Stack-Vorlage; vorher ggf. die private Docker-Hub-Registry in Portainer konfigurieren.
 
 Optional kann ein Git-Stack mit der Repository-URL, Referenz `refs/heads/release/0.0.1`, privaten Git-Zugangsdaten und Compose-Pfad `compose.yaml` eingerichtet werden, sofern die jeweilige Portainer-Installation Builds aus Git-Kontext unterstützt. Der lokal gebaute Image-Stack ist die Alternative.
 
@@ -130,7 +130,7 @@ Offizielle Anleitung: [Portainer – Add a new stack](https://docs.portainer.io/
 
 **Jetzt verfügbar – Git-Stack:**
 
-1. In Dockhand unter **Settings → Git** die Zugangsdaten für das private Repository hinterlegen.
+1. In Dockhand unter **Settings → Git** bei einem privaten Fork die Git-Zugangsdaten hinterlegen.
 2. Unter **Stacks** einen Git-Stack mit der URL `https://github.com/Skoun181/PetDiary.git` erstellen.
 3. Branch `release/0.0.1`, Compose-Datei `compose.yaml`, Kontextverzeichnis Repository-Wurzel einstellen.
 4. **Build images on deploy** aktivieren (notwendig für build: .) und deployen. Beim Einsatz eines Remote-Agenten Build-Unterstützung prüfen.
