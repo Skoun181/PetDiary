@@ -4,7 +4,7 @@ WORKDIR /app
 RUN groupadd --gid 10001 petdiary && useradd --uid 10001 --gid 10001 --no-create-home petdiary && mkdir -p /data && chown 10001:10001 /data
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY app.py .
+COPY app.py catalog.py .
 COPY templates ./templates
 COPY static ./static
 USER 10001:10001
