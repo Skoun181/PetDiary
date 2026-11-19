@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PetDiary · Deine Tierakte</title>
+<link rel="stylesheet" href="{{ url_for('static',filename='style.css') }}">
+</head>
+<body>
+<header class="top"><div class="top-inner"><a class="brand" href="{{ url_for('home') }}"><span class="logo">🐾</span> PetDiary<span class="brand-dot">.</span></a><nav><a href="{{ url_for('home') }}">Übersicht</a><a href="{{ url_for('reminders') }}">Erinnerungen</a></nav></div></header>
+<main>
+{% for message in get_flashed_messages() %}<div class="alert">{{ message }}</div>{% endfor %}
+{% macro field(name,label,data,type='text',required=false) %}<label>{{ label }}<input name="{{ name }}" type="{{ type }}" value="{{ data.get(name,'') or '' }}" {% if required %}required{% endif %} {% if type=='text' %}maxlength="300"{% endif %}></label>{% endmacro %}
+{% macro csrf_field() %}<input type="hidden" name="csrf" value="{{ csrf }}">{% endmacro %}
+{% macro reminder_list(reminders) %}
+{% for r in reminders %}
+<div class="reminder"><div class="date-icon">📅</div><div class="grow"><a href="{{ url_for('record_edit',pid=r.pet_id,rid=r.id) }}"><strong>{{ r.title }}</strong></a><div class="muted">{{ r.pet }} · {{ categories[r.kind] }} · {{ r.due }}</div></div><span class="pill {{ 'warn' if r.days_left < 0 else '' }}">{% if r.days_left < 0 %}{{ -r.days_left }} Tage überfällig{% elif r.days_left == 0 %}Heute{% else %}in {{ r.days_left }} Tagen{% endif %}</span><form method="post" action="{{ url_for('toggle',rid=r.id) }}">{{ csrf_field() }}<button class="small secondary" title="Erinnerung erledigen">✓ Erledigt</button></form></div>
+{% else %}<p class="empty">Keine offenen Erinnerungen. Alles im grünen Bereich!</p>{% endfor %}
+{% endmacro %}
+{% if screen=='home' %}
+<section class="hero"><div><p class="eyebrow">FÜR DEINE LIEBLINGE</p><h1>Hallo, Tierfreund!</h1><p>Die Gesundheit deiner Tiere. Alles an einem Ort.</p><a class="button" href="{{ url_for('pet_edit') }}">+ Tier hinzufügen</a></div><span class="hero-art" aria-hidden="true">🐾</span></section>
+<div class="section-title"><h2>Meine Tiere</h2><span class="muted">{{ pets|length }} Profile</span></div>
+<div class="pet-grid">
+{% for p in pets %}<a class="card pet-card" href="{{ url_for('pet_detail',pid=p.id) }}"><div class="avatar">{{ '🐱' if p.species|lower in ['katze','cat'] else '🐶' if p.species|lower in ['hund','dog'] else '🐾' }}</div><div class="grow"><h3>{{ p.name }}</h3><p class="muted">{{ p.species }}{% if p.breed %} · {{ p.breed }}{% endif %}</p><span class="link">Zur Gesundheitsakte →</span></div></a>
+{% else %}<a class="card empty add-card" href="{{ url_for('pet_edit') }}">+ Dein erstes Tier anlegen</a>{% endfor %}
+</div>
+<div class="section-title"><h2>In den nächsten 30 Tagen</h2><a class="link" href="{{ url_for('reminders') }}">Alle ansehen →</a></div><section class="card">{{ reminder_list(reminders) }}</section>
+{% elif screen=='reminders' %}
+<p class="eyebrow">ORGANISATION</p><h1>Erinnerungen</h1><p class="muted">Alle offenen Termine und Fälligkeiten, inklusive überfälliger Einträge.</p><section class="card">{{ reminder_list(reminders) }}</section><p class="muted">Neue Erinnerungen kannst du direkt in der Akte eines Tieres anlegen. Erledigte Erinnerungen bleiben im ursprünglichen Akteneintrag gespeichert.</p>
+{% elif screen=='pet_edit' %}
+<a class="back" href="{{ url_for('pet_detail',pid=pid) if pid else url_for('home') }}">← Zurück</a><h1>{{ 'Tierprofil bearbeiten' if pid else 'Neues Tier anlegen' }}</h1>
+<form class="card editor" method="post">{{ csrf_field() }}
+<h2>Über dein Tier</h2><div class="fields">
+{{ field('name','Name *',pet,required=true) }}{{ field('species','Tierart *',pet,required=true) }}
+{{ field('breed','Rasse',pet) }}{{ field('birth','Geburtsdatum',pet,'date') }}
+<label>Geschlecht<select name="sex"><option value="">Nicht angegeben</option>{% for s in ['Weiblich','Männlich','Unbekannt'] %}<option {% if pet.get('sex')==s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></label>{{ field('color','Fellfarbe / Merkmale',pet) }}</div>
+<h2>Kennzeichnung</h2><div class="fields">{{ field('chip','Mikrochipnummer',pet) }}{{ field('chip_date','Datum der Kennzeichnung / Ablesung',pet,'date') }}{{ field('chip_location','Position des Mikrochips',pet) }}{{ field('tattoo','Tätowierung (falls vorhanden)',pet) }}</div>
+<h2>Halter & Heimtierausweis</h2><div class="fields">{{ field('owner','Name des Halters',pet) }}{{ field('owner_contact','Anschrift / Kontakt',pet) }}{{ field('passport','Heimtierausweisnummer',pet) }}{{ field('issuer','Ausstellender Tierarzt / Praxis',pet) }}{{ field('issued','Ausstellungsdatum',pet,'date') }}</div>
+<button>Profil speichern</button></form>
+{% if pid %}<details class="card danger-area"><summary>Tier und sämtliche Akteneinträge löschen</summary><form method="post" action="{{ url_for('pet_delete',pid=pid) }}">{{ csrf_field() }}<p>Unwiderruflich. Gib zur Bestätigung den Namen {{ pet.name }} ein.</p><label>Name<input name="confirm" required></label><button class="danger">Tier endgültig löschen</button></form></details>{% endif %}
+{% elif screen=='pet' %}
+<a class="back" href="{{ url_for('home') }}">← Meine Tiere</a>
+<section class="hero pet-hero"><div class="avatar large">{{ '🐱' if pet.species|lower in ['katze','cat'] else '🐶' if pet.species|lower in ['hund','dog'] else '🐾' }}</div><div class="grow"><p class="eyebrow">GESUNDHEITSAKTE</p><h1>{{ pet.name }}</h1><p>{{ pet.species }}{% if pet.breed %} · {{ pet.breed }}{% endif %}{% if pet.birth %} · Geb. {{ pet.birth }}{% endif %}</p><a class="link" href="{{ url_for('pet_edit',pid=pet.id) }}">Profil bearbeiten →</a></div><a class="button" href="{{ url_for('record_edit',pid=pet.id,kind='vaccine' if tab=='passport' else 'visit') }}">+ Eintrag</a></section>
+<nav class="tabs" aria-label="Tierakte"><a class="{{ 'active' if tab!='passport' else '' }}" href="{{ url_for('pet_detail',pid=pet.id) }}">Gesundheitsakte</a><a class="{{ 'active' if tab=='passport' else '' }}" href="{{ url_for('pet_detail',pid=pet.id,tab='passport') }}">Digitaler Impfpass</a></nav>
+{% if tab=='passport' %}
+<section class="card passport"><p class="eyebrow">PRIVATE DIGITALE DOKUMENTATION</p><h2>Impfpass · {{ pet.name }}</h2><p class="muted">Orientiert am Heimtierausweis. Kein amtlicher Nachweis und kein Ersatz für das Original bei Reisen.</p><dl class="passport-grid">
+{% for key,label in [('owner','I · Halter'),('owner_contact','Kontakt / Anschrift'),('species','II · Tierart'),('breed','Rasse'),('birth','Geburtsdatum'),('sex','Geschlecht'),('color','Fellfarbe'),('chip','III · Mikrochipnummer'),('chip_date','Kennzeichnung / Ablesung'),('chip_location','Chipposition'),('tattoo','Tätowierung'),('passport','IV · Ausweisnummer'),('issuer','Ausgestellt durch'),('issued','Ausstellungsdatum')] %}<div><dt>{{ label }}</dt><dd>{{ pet.get(key) or '–' }}</dd></div>{% endfor %}
+</dl><a class="link" href="{{ url_for('pet_edit',pid=pet.id) }}">Ausweisdaten bearbeiten →</a></section>
+<div class="section-title"><h2>Impfungen & Vorsorge</h2><a class="link" href="{{ url_for('record_edit',pid=pet.id,kind='vaccine') }}">+ Impfung</a></div>
+{% else %}
+<div class="filters"><a class="chip {{ 'selected' if not category else '' }}" href="{{ url_for('pet_detail',pid=pet.id) }}">Alle</a>{% for k,v in categories.items() %}<a class="chip {{ 'selected' if category==k else '' }}" href="{{ url_for('pet_detail',pid=pet.id,kind=k) }}">{{ v }}</a>{% endfor %}</div>
+<div class="section-title"><h2>Chronologischer Verlauf</h2><a class="link" href="{{ url_for('record_edit',pid=pet.id,kind=category or 'visit') }}">+ Eintrag</a></div>
+{% endif %}
+<div class="timeline">
+{% for r in records %}
+<article class="card entry"><div class="entry-top"><span class="pill">{{ categories[r.kind] }}</span><time>{{ r.day }}</time></div><h3>{{ r.title }}</h3>
+{% if r.vet %}<p class="muted">Tierarzt: {{ r.vet }}</p>{% endif %}{% if r.notes %}<p class="notes">{{ r.notes }}</p>{% endif %}
+{% if r.product or r.batch or r.valid_from or r.valid_until or r.weight %}<dl class="passport-grid">{% for k,l in [('product','Präparat / Hersteller'),('batch','Chargennummer'),('valid_from','Gültig ab'),('valid_until','Gültig bis'),('weight','Gewicht (kg)')] %}{% if r[k] %}<div><dt>{{ l }}</dt><dd>{{ r[k] }}</dd></div>{% endif %}{% endfor %}</dl>{% endif %}
+{% if r.due %}<div class="due">📅 {{ 'Erledigte Erinnerung' if r.done else 'Nächste Erinnerung' }}: {{ r.due }} {% if r.done %}<span class="muted">✓</span>{% endif %}</div>{% endif %}
+{% if r.files %}<div class="attachments">{% for f in r.files %}<a href="{{ url_for('attachment',aid=f.id) }}">📎 {{ f.name }} <span>Vorschau →</span></a>{% endfor %}</div>{% endif %}
+<a class="link" href="{{ url_for('record_edit',pid=pet.id,rid=r.id) }}">Bearbeiten →</a></article>
+{% else %}<section class="card empty">Noch keine Einträge in diesem Bereich.</section>{% endfor %}
+</div>
+{% elif screen=='record_edit' %}
+<a class="back" href="{{ url_for('pet_detail',pid=pet.id) }}">← Akte von {{ pet.name }}</a><h1>{{ 'Eintrag bearbeiten' if rid else 'Neuer Akteneintrag' }}</h1>
+<form method="post" enctype="multipart/form-data" class="card editor">{{ csrf_field() }}
+<h2>Allgemein</h2><div class="fields"><label>Kategorie *<select name="kind" required>{% for k,v in categories.items() %}<option value="{{ k }}" {% if record.get('kind')==k %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></label>{{ field('title','Titel *',record,required=true) }}{{ field('day','Datum *',record,'date',true) }}{{ field('vet','Behandelnder Tierarzt / Praxis',record) }}</div><label>Notizen / Befund<textarea name="notes" maxlength="10000" rows="5">{{ record.get('notes','') or '' }}</textarea></label>
+<h2>Impfung, Medikament oder Gewicht</h2><p class="muted">Nur die für diesen Eintrag relevanten Felder ausfüllen. Bei Impfungen Krankheit / Impfziel im Titel angeben.</p><div class="fields">{{ field('product','Präparat (Name und Hersteller)',record) }}{{ field('batch','Chargennummer',record) }}{{ field('valid_from','Gültig ab',record,'date') }}{{ field('valid_until','Gültig bis',record,'date') }}{{ field('weight','Gewicht in kg (z. B. 4,5)',record) }}</div>
+<h2>Erinnerung</h2>{{ field('due','Nächste Fälligkeit / Erinnerung',record,'date') }}<p class="muted">Bei Impfungen wird ohne separates Erinnerungsdatum das Gültigkeitsende übernommen. Bei zukünftigen Terminen das Termindatum. Keine automatische medizinische Berechnung.</p>
+{% if record.get('done') %}<p class="due">✓ Erinnerung erledigt. Bei geändertem Fälligkeitsdatum wird sie wieder geöffnet.</p>{% endif %}
+<h2>Dateianhänge</h2><label>PDF oder Bild hinzufügen<input name="files" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" multiple></label><p class="muted">Bis zu 5 Dateien pro Speichern, je 10 MB.</p>
+<button>Eintrag speichern</button></form>
+{% if rid and files %}<section class="card"><h2>Gespeicherte Anhänge</h2>{% for f in files %}<div class="reminder"><a class="grow" href="{{ url_for('attachment',aid=f.id) }}">📎 {{ f.name }}</a><form method="post" action="{{ url_for('attachment_delete',aid=f.id) }}">{{ csrf_field() }}<button class="danger small">Löschen</button></form></div>{% endfor %}</section>{% endif %}
+{% if rid %}<section class="card danger-area"><details><summary>Eintrag löschen</summary><form method="post" action="{{ url_for('record_delete',rid=rid) }}">{{ csrf_field() }}<p>Dieser Eintrag und alle Anhänge werden unwiderruflich gelöscht.</p><button class="danger">Endgültig löschen</button></form></details>{% if record.get('done') %}<form method="post" action="{{ url_for('toggle',rid=rid) }}">{{ csrf_field() }}<button class="secondary">Erinnerung wieder öffnen</button></form>{% endif %}</section>{% endif %}
+{% elif screen=='preview' %}
+<h1>Dateivorschau</h1><section class="card"><div class="section-title"><h2 class="filename">{{ file.name }}</h2><a class="button secondary" href="{{ url_for('attachment_content',aid=file.id,download=1) }}">Download</a></div>
+{% if file.mime=='application/pdf' %}<iframe class="pdf" title="PDF Vorschau" src="{{ url_for('attachment_content',aid=file.id) }}"></iframe><p class="muted">Falls dein Browser keine PDF-Vorschau unterstützt, kannst du die Datei herunterladen.</p>{% else %}<img class="preview" src="{{ url_for('attachment_content',aid=file.id) }}" alt="{{ file.name }}">{% endif %}</section>
+{% endif %}
+</main><footer>PetDiary · Deine Daten bleiben bei dir. <span>Self-hosted ♥</span></footer></body></html>
