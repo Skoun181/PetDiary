@@ -336,7 +336,7 @@ def create_app(config=None):
             elif request.form.get("action")=="mark":
                 con.execute("INSERT OR IGNORE INTO dose_checks VALUES (?,?,?)",(rid,day.isoformat(),clock))
             else: abort(400)
-        return redirect(url_for("home",week=request.form.get("week",day.isoformat()),pet=request.form.get("pet","")),303)
+        return redirect(url_for("home",week=request.form.get("week",day.isoformat()),pet=request.form.get("pet",""))+"#med-calendar",303)
 
     @app.get("/")
     def home():
@@ -520,6 +520,8 @@ def create_app(config=None):
             files=[dict(f) for f in con.execute("SELECT id,name,mime FROM attachments WHERE record_id=?",(rid,))]
             if request.method=="POST":
                 try:
+                    raw=extra_med_forms() if "extra_present" in request.form else None
+                    if raw is not None: extras=raw
                     d=values(RECORD_FIELDS,("day","valid_from","valid_until","due"))
                     custom=request.form.get("product_custom","").strip()
                     if len(custom)>300: raise ValueError("Präparatbezeichnung maximal 300 Zeichen.")
@@ -541,9 +543,6 @@ def create_app(config=None):
                         validate_med(d,clocks,request.form.get("med_mode"))
                     else:
                         for k in ("dose","dose_unit","duration","dose_times"): d[k]=""
-                    raw=extra_med_forms() if "extra_present" in request.form else None
-                    if raw is not None:
-                        extras=raw
                     planned=validate_extras(raw,d,existing) if raw is not None else None
                     if planned and d["kind"] not in ("visit","exam","med"):
                         raise ValueError("Zusätzliche Medikamente sind bei Terminen, Untersuchungen und Medikamenteneinträgen möglich.")
