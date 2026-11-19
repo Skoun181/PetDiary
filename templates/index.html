@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="{{ url_for('static',filename='style.css') }}">
 </head>
 <body>
-<header class="top"><div class="top-inner"><a class="brand" href="{{ url_for('home') }}"><span class="logo">🐾</span> PetDiary<span class="brand-dot">.</span></a><nav><a href="{{ url_for('home') }}">Übersicht</a><a href="{{ url_for('reminders') }}">Erinnerungen</a></nav></div></header>
+<header class="top"><div class="top-inner"><a class="brand" href="{{ url_for('home') }}"><span class="logo">🐾</span> PetDiary<span class="brand-dot">.</span></a>{% if screen not in ['setup','login'] %}<nav><a href="{{ url_for('home') }}">Übersicht</a><a href="{{ url_for('reminders') }}">Erinnerungen</a><a href="{{ url_for('settings') }}">Einstellungen</a></nav>{% endif %}</div></header>
 <main>
 {% for message in get_flashed_messages() %}<div class="alert">{{ message }}</div>{% endfor %}
 {% macro field(name,label,data,type='text',required=false) %}<label>{{ label }}<input name="{{ name }}" type="{{ type }}" value="{{ data.get(name,'') or '' }}" {% if required %}required{% endif %} {% if type=='text' %}maxlength="300"{% endif %}></label>{% endmacro %}
@@ -17,7 +17,29 @@
 <div class="reminder"><div class="date-icon">📅</div><div class="grow"><a href="{{ url_for('record_edit',pid=r.pet_id,rid=r.id) }}"><strong>{{ r.title }}</strong></a><div class="muted">{{ r.pet }} · {{ categories[r.kind] }} · {{ r.due }}</div></div><span class="pill {{ 'warn' if r.days_left < 0 else '' }}">{% if r.days_left < 0 %}{{ -r.days_left }} Tage überfällig{% elif r.days_left == 0 %}Heute{% else %}in {{ r.days_left }} Tagen{% endif %}</span><form method="post" action="{{ url_for('toggle',rid=r.id) }}">{{ csrf_field() }}<button class="small secondary" title="Erinnerung erledigen">✓ Erledigt</button></form></div>
 {% else %}<p class="empty">Keine offenen Erinnerungen. Alles im grünen Bereich!</p>{% endfor %}
 {% endmacro %}
-{% if screen=='home' %}
+{% if screen in ['setup','login'] %}
+<section class="auth-layout"><div class="hero"><div><p class="eyebrow">DEINE PRIVATE TIERGESUNDHEITSAKTE</p><h1>{{ 'Willkommen bei PetDiary!' if screen=='setup' else 'Schön, dass du da bist!' }}</h1><p>{{ 'Erstelle dein lokales Administratorkonto. Deine Daten bleiben auf deinem Server.' if screen=='setup' else 'Melde dich an, um die Akten deiner Lieblinge zu öffnen.' }}</p></div></div>
+<form class="card editor auth-card" method="post">{{ csrf_field() }}
+<h2>{{ 'Konto erstellen' if screen=='setup' else 'Anmelden' }}</h2>
+{% if login_error %}<div class="alert" role="alert">{{ login_error }}</div>{% endif %}
+<label>Benutzername<input name="username" autocomplete="username" maxlength="80" required autofocus></label>
+<label>Passwort<input name="password" type="password" autocomplete="{{ 'new-password' if screen=='setup' else 'current-password' }}" maxlength="256" {% if screen=='setup' %}minlength="12"{% endif %} required></label>
+{% if screen=='setup' %}<label>Passwort wiederholen<input name="confirm_password" type="password" autocomplete="new-password" minlength="12" maxlength="256" required></label><p class="muted">Mindestens 12 Zeichen. Führe die Ersteinrichtung nur in einem vertrauenswürdigen Netzwerk durch.</p>{% endif %}
+<button>{{ 'PetDiary einrichten' if screen=='setup' else 'Anmelden' }}</button></form></section>
+{% elif screen=='settings' %}
+<p class="eyebrow">DEIN KONTO</p><h1>Einstellungen</h1>
+<section class="card"><h2>Home Assistant</h2><p>API-Status: <strong>{{ 'Token aktiv' if token_active else 'Kein Token eingerichtet' }}</strong></p><p class="muted">Die API ist nur lesend. Ein neuer Token ersetzt den bisherigen. Bewahre ihn sicher auf; er wird nur nach Erstellung angezeigt.</p>
+{% if new_token %}<label>Neuer API-Token<input readonly value="{{ new_token }}" autocomplete="off" spellcheck="false"></label>{% endif %}
+<label>API-Endpunkt<input readonly value="{{ url_for('api_reminders', _external=false) }}?days=30"></label>
+<form method="post">{{ csrf_field() }}<label>Aktuelles Passwort<input name="current_password" type="password" autocomplete="current-password" required maxlength="256"></label><button name="action" value="generate">{{ 'Token ersetzen' if token_active else 'Token erstellen' }}</button> {% if token_active %}<button class="secondary" name="action" value="revoke">Token widerrufen</button>{% endif %}</form></section>
+<section class="card editor"><h2>Kontodaten ändern</h2><form method="post">{{ csrf_field() }}<input type="hidden" name="action" value="password">
+<label>Benutzername<input name="username" value="{{ username }}" autocomplete="username" required maxlength="80"></label>
+<label>Aktuelles Passwort<input name="current_password" type="password" autocomplete="current-password" required maxlength="256"></label>
+<label>Neues Passwort<input name="password" type="password" autocomplete="new-password" required minlength="12" maxlength="256"></label>
+<label>Neues Passwort wiederholen<input name="confirm_password" type="password" autocomplete="new-password" required minlength="12" maxlength="256"></label>
+<button>Kontodaten speichern</button></form></section>
+<section class="card"><h2>Abmelden</h2><form method="post" action="{{ url_for('logout') }}">{{ csrf_field() }}<button class="secondary">Abmelden</button></form></section>
+{% elif screen=='home' %}
 <section class="hero"><div><p class="eyebrow">FÜR DEINE LIEBLINGE</p><h1>Hallo, Tierfreund!</h1><p>Die Gesundheit deiner Tiere. Alles an einem Ort.</p><a class="button" href="{{ url_for('pet_edit') }}">+ Tier hinzufügen</a></div><span class="hero-art" aria-hidden="true">🐾</span></section>
 <div class="section-title"><h2>Meine Tiere</h2><span class="muted">{{ pets|length }} Profile</span></div>
 <div class="pet-grid">
