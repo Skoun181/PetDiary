@@ -19,12 +19,14 @@ Der digitale Impfpass ist eine private Abschrift, keine amtliche Ausstellung und
 
 ## Tierprofile und Medikamentenkalender
 
-- Suchbare native Browser-Vorschlagslisten mit Freitext: Tierart, passende Rassen, Geschlecht, Fellfarbe, Chip- und Tätowierungsposition; eigenes Merkmale-Feld.
+- Eigene gestaltete, suchbare Vorschlagslisten mit Freitext: Tierart, passende Rassen, Geschlecht, Fellfarbe, Chip- und Tätowierungsposition; eigenes Merkmale-Feld.
 - Eigene Profilbilder (JPEG, PNG oder WebP, maximal 5 MB), lokal in SQLite gespeichert.
-- Lokaler Präparate-Startkatalog (keine vollständige oder amtlich abgeglichene Arzneimitteldatenbank). Eigene Präparate werden bei gespeichertem Eintrag zur Vorschlagsliste hinzugefügt. Name allein sagt nichts über Zulassung, Eignung oder Dosierung aus. Offizielle Recherche: [EU-Produktdatenbank](https://medicines.health.europa.eu/veterinary/de).
+- Lokaler Präparate-Startkatalog (keine vollständige oder amtlich abgeglichene Arzneimitteldatenbank). Eigene Präparate werden bei gespeichertem Eintrag zur Vorschlagsliste hinzugefügt. Geprüfte Varianten unter anderem für Milpro, Milbemax, Apoquel und Metacam ergänzen den Startkatalog. Die genaue eigene Präparatbezeichnung kann separat eingegeben werden; sie ersetzt beim Speichern die Auswahl. Name allein sagt nichts über Zulassung, Eignung oder Dosierung aus. Offizielle Recherche: [EU-Produktdatenbank](https://medicines.health.europa.eu/veterinary/de).
 - Kategorie Medikament: Präparat, Menge je Gabe, Einheit, Startdatum, Anzahl Tage (1–3660), bis zu zwölf Uhrzeiten pro Tag. Alle Tage und Uhrzeiten wiederholen sich gleich; unterschiedliche Mengen als getrennte Pläne dokumentieren. Keine automatisch vorgeschlagene Dosierung.
 - Wochenkalender im Dashboard, nach Tier filterbar, einzelne Gaben als gegeben markieren bzw. wieder öffnen. Änderungen des Plans setzen dessen bisherige Häkchen zurück.
 - Bestehende Datenbanken werden beim Start um die neuen Felder und Tabellen ergänzt. Vor Update Backup erstellen.
+
+Bei Impfungen bedeutet Gültig bis das dokumentierte Ende des Impfschutzes bzw. der Nachweisgültigkeit, Erinnern am dagegen den gewünschten Erinnerungstag. Bei Medikamenten wird eine separate Erinnerung (z. B. Nachkontrolle) nur optional angezeigt; tägliche Gaben stammen aus dem Medikamentenplan. Bereits gespeicherte Zusatzfelder bleiben sichtbar und erhalten.
 
 ### Home Assistant – Medikamentenplan
 
