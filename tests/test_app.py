@@ -148,5 +148,22 @@ class PetDiaryTest(unittest.TestCase):
         self.assertEqual(result["medications"][0]["product"],"Eigene Variante 123")
         self.assertIn(b"Eigene Variante 123",self.client.get(p+"/records/new").data)
 
+    def test_password_recovery_preserves_data_and_revokes_sessions(self):
+        from pathlib import Path
+        from reset_password import reset_password
+        a=self.pet("Recovery")
+        self.assertEqual(self.post(a+"/records/new",kind="note",title="Behalten",day="2026-12-01").status_code,303)
+        path=Path(self.tmp.name)/"petdiary.sqlite3"
+        with self.assertRaises(ValueError):
+            reset_password(path,"short")
+        self.assertEqual(reset_password(path,"new-password-1234"),"admin")
+        self.assertEqual(self.client.get("/").location,"/login")
+        self.refresh_csrf(self.client,"/login")
+        self.assertEqual(self.post("/login",username="admin",password=self.password).status_code,401)
+        self.assertEqual(self.post("/login",username="admin",password="new-password-1234").location,"/")
+        self.assertIn(b"Recovery",self.client.get("/").data)
+        self.assertIn(b"Behalten",self.client.get(a).data)
+        self.assertEqual(self.client.get("/api/v1/reminders",headers=self.api).status_code,200)
+
 if __name__=="__main__":
     unittest.main()
