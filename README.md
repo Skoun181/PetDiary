@@ -2,7 +2,7 @@
 
 Private, ressourcenschonende Tiergesundheitsakte für den eigenen Docker-Server. Keine Cloud, kein JavaScript-Framework, keine zusätzliche Datenbank. Deutschsprachige Weboberfläche in Mintgrün und Petrol, inspiriert von modernen Tiergesundheits-Apps.
 
-**Status:** erste Entwicklungsfassung 0.1; vor produktiver Nutzung testen.
+**Status:** erste Entwicklungsfassung 0.1; vor produktiver Nutzung testen. Ein lokales Administratorkonto pro Installation; keine Mehrbenutzerverwaltung.
 
 ## Funktionen
 
@@ -13,7 +13,7 @@ Private, ressourcenschonende Tiergesundheitsakte für den eigenen Docker-Server.
 - Digitaler privater Impfpass, orientiert am EU-Heimtierausweis: Halter, Tierdaten, Kennzeichnung, Ausweisnummer, ausstellende Praxis sowie Impf- und Vorsorgehistorie
 - Erinnerungen für Termine und Impfungen, als erledigt markieren und wieder öffnen; Gültigkeitsende bei Impfungen als Standardfälligkeit
 - Lesende REST-API für Home Assistant, Beispielkonfiguration und Dashboard-Karte
-- Basic-Auth für die Oberfläche, eigener API-Token, CSRF-Schutz, persistent gespeicherte SQLite-Daten, Non-Root-Container, Healthcheck
+- Browser-Ersteinrichtung, lokale Anmeldung, eigener API-Token, CSRF-Schutz, persistent gespeicherte SQLite-Daten, Non-Root-Container, Healthcheck
 
 Der digitale Impfpass ist eine private Abschrift, keine amtliche Ausstellung und kein Ersatz für den Original-Heimtierausweis. Es werden keine medizinischen Impfintervalle berechnet und keine tierärztlichen Signaturen erzeugt. Weitere amtliche Sonderabschnitte sind noch nicht vollständig abgebildet. Es gibt noch keine Tierarztterminbuchung, Push-Nachrichten, Foto-Profilbilder oder einzelne Benutzerkonten.
 
@@ -24,25 +24,24 @@ Voraussetzung: Docker und Docker Compose v2. Das Repository ist privat; zum Klon
 ```sh
 git clone -b petdiary-v0.1 https://github.com/Skoun181/PetDiary.git
 cd PetDiary
-cp .env.example .env
-chmod 600 .env
-openssl rand -hex 24
-openssl rand -hex 32
-openssl rand -hex 32
-```
-
-Die drei Ausgaben getrennt in `.env` als ADMIN_PASSWORD, API_TOKEN und SECRET_KEY eintragen. Keine Geheimnisse committen. Das Admin-Passwort braucht mindestens 12 Zeichen, die anderen beiden mindestens 32 Zeichen.
-
-```sh
 docker compose up -d --build
-docker compose ps
 ```
 
-Standardmäßig ist PetDiary unter http://127.0.0.1:8080 erreichbar. Benutzername: admin (oder ADMIN_USER). Für andere Geräte bevorzugt per HTTPS-Reverse-Proxy bereitstellen und COOKIE_SECURE=1 einstellen. BIND_ADDRESS nur bei bewusstem Netzwerkzugriff ändern (z. B. LAN-IP); Firewall entsprechend setzen. Basic Auth / API-Token sind ohne TLS im Netzwerk nicht verschlüsselt. Nicht ungeschützt im Internet freigeben. Läuft der Proxy ebenfalls in Docker, kann er über ein gemeinsames Netzwerk direkt auf Port 8080 zugreifen; dazu die Compose-Konfiguration anpassen.
+Öffne http://SERVER-IP:8080 im Browser. Beim ersten Aufruf legst du ein lokales Administratorkonto an (Passwort mindestens 12 Zeichen). Es gibt keine Standard-Zugangsdaten und keine benötigte .env. Das Session-Geheimnis wird automatisch erzeugt und zusammen mit dem Passwort-Hash im persistenten Datenvolume gespeichert. Danach ist die Ersteinrichtung gesperrt und du meldest dich über die normale Login-Seite an. Unter Einstellungen kannst du Kontodaten ändern, dich abmelden und einen Home-Assistant-API-Token erzeugen oder widerrufen.
+
+**Sicherheit:** Der Compose-Port ist standardmäßig im Netzwerk erreichbar. Der erste Besucher kann das noch nicht eingerichtete Konto beanspruchen. Führe die Ersteinrichtung in einem vertrauenswürdigen Netzwerk durch; bei Bedarf Port zunächst auf 127.0.0.1:8080:8080 beschränken und per SSH-Tunnel einrichten. Für dauerhaften Netzwerkzugriff HTTPS-Reverse-Proxy verwenden und optional COOKIE_SECURE=1 als Compose-Umgebungsvariable setzen; keine ungeschützte Internetfreigabe.
+
+### Bereits vorhandene Installation der ENV-Version
+
+Vor dem Upgrade ein Backup anlegen. Wenn bereits Tierdaten vorhanden sind, müssen beim ersten Start der neuen Version die bisherigen ADMIN_USER, ADMIN_PASSWORD und API_TOKEN einmalig als Umgebungsvariablen über ein temporäres Compose-Override explizit bereitgestellt werden. Die alte .env allein wird nicht automatisch an den Container übergeben. Die Zugangsdaten werden beim ersten Start als Hashes übernommen und bestehende Sitzungen verworfen; danach das Override und die ENV-Zugangsdaten entfernen. Ohne Admin-Konto und mit bestehenden Tierdaten verweigert die Anwendung den Start, damit niemand die bestehende Akte per Ersteinrichtung übernehmen kann.
+
+### Geplante Installation per fertigem Image
+
+Sobald ein Docker-Image in einer Registry veröffentlicht ist, entfällt auch das Klonen und Bauen. Die Compose-Datei benötigt dann nur Image, Port, persistentes Volume und Restart-Policy. Ein öffentlich zugängliches Registry-Image wurde noch nicht veröffentlicht.
 
 ## Home Assistant
 
-API: GET /api/v1/reminders?days=30. Bearer-Token aus API_TOKEN. days ist 0 bis 3650. Überfällige nicht erledigte Einträge sind immer im Ergebnis enthalten. next ist die früheste offene Erinnerung unabhängig vom Fenster. dates sind ISO-8601; days_left ist negativ bei Überfälligkeit.
+API: GET /api/v1/reminders?days=30. Bearer-Token unter Einstellungen erzeugen; er wird nur direkt nach der Erstellung angezeigt. Ein neuer Token widerruft den alten. days ist 0 bis 3650. Überfällige nicht erledigte Einträge sind immer im Ergebnis enthalten. next ist die früheste offene Erinnerung unabhängig vom Fenster. dates sind ISO-8601; days_left ist negativ bei Überfälligkeit.
 
 ```sh
 curl -H "Authorization: Bearer DEIN_API_TOKEN" \
@@ -56,7 +55,7 @@ Antwort (Beispieldaten):
 ```
 
 1. `examples/home-assistant.yaml` in die HA-Konfiguration übernehmen.
-2. In HA secrets.yaml die erreichbare URL und den vollständigen Bearer-Header eintragen. Der Standard-Loopback-Port ist von einem anderen Host nicht erreichbar; HTTPS-URL oder bewusst freigegebenen LAN-Endpunkt verwenden.
+2. In HA secrets.yaml die erreichbare URL und den vollständigen Bearer-Header eintragen. HTTPS-URL oder bewusst freigegebenen LAN-Endpunkt verwenden.
 3. Konfiguration prüfen und HA neu laden bzw. neu starten.
 4. `examples/home-assistant-card.yaml` als manuelle Karte hinzufügen. Entity-ID gegebenenfalls anpassen.
 
@@ -74,7 +73,7 @@ docker compose cp petdiary:/data/backup.sqlite3 ./petdiary-backup.sqlite3
 docker compose exec -T petdiary rm /data/backup.sqlite3
 ```
 
-Backup geschützt aufbewahren, auch .env separat sicher sichern. Für Restore Container stoppen, Datenbank in einem separaten Test-Volume wiederherstellen, Rechte UID/GID 10001 sicherstellen und erst nach Prüfung das Produktiv-Volume ersetzen. Nie `docker compose down -v` verwenden, wenn die Daten erhalten bleiben sollen.
+Backup geschützt aufbewahren: Es enthält auch die Anmelde-Hashes und das Session-Geheimnis. Für Restore Container stoppen, Datenbank in einem separaten Test-Volume wiederherstellen, Rechte UID/GID 10001 sicherstellen und erst nach Prüfung das Produktiv-Volume ersetzen. Nie `docker compose down -v` verwenden, wenn die Daten erhalten bleiben sollen.
 
 Updates (nach Backup): `git pull && docker compose up -d --build`. Ressourcenverbrauch live mit `docker stats petdiary` messen. Keine validierten RAM-, Durchsatz- oder Stabilitätsbenchmarks vorhanden.
 
