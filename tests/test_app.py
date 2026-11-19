@@ -9,16 +9,26 @@ class PetDiaryTest(unittest.TestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.app=create_app(dict(TESTING=True,DATA_DIR=self.tmp.name,ADMIN_PASSWORD="test-password-123",API_TOKEN="a"*32,SECRET_KEY="b"*32))
+        self.app=create_app(dict(TESTING=True,DATA_DIR=self.tmp.name))
         self.client=self.app.test_client()
-        self.auth={"Authorization":"Basic "+base64.b64encode(b"admin:test-password-123").decode()}
-        self.api={"Authorization":"Bearer "+"a"*32}
-        self.client.get("/",headers=self.auth)
-        with self.client.session_transaction() as s:
-            self.csrf=s["csrf"]
+        self.password="test-password-123"
+        self.auth={}
+        self.refresh_csrf(self.client,"/setup")
+        r=self.post("/setup",username="admin",password=self.password,confirm_password=self.password)
+        self.assertEqual(r.status_code,303)
+        self.refresh_csrf(self.client,"/")
+        r=self.post("/settings",action="generate",current_password=self.password)
+        import re
+        token=re.search(rb'Neuer API-Token<input readonly value="([^"]+)"',r.data).group(1).decode()
+        self.api={"Authorization":"Bearer "+token}
+
+    def refresh_csrf(self,client,url):
+        client.get(url)
+        with client.session_transaction() as sess:
+            self.csrf=sess["csrf"]
 
     def post(self,url,**data):
-        return self.client.post(url,data={"csrf":self.csrf,**data},headers=self.auth)
+        return self.client.post(url,data={"csrf":self.csrf,**data})
 
     def pet(self,name="Milo"):
         r=self.post("/pets/new",name=name,species="Katze")
@@ -26,7 +36,8 @@ class PetDiaryTest(unittest.TestCase):
         return r.location
 
     def test_auth_and_csrf(self):
-        self.assertEqual(self.client.get("/").status_code,401)
+        self.assertEqual(self.app.test_client().get("/").location,"/login")
+        self.assertEqual(self.client.get("/setup").location,"/")
         self.assertEqual(self.client.get("/healthz").status_code,200)
         self.assertEqual(self.client.get("/api/v1/reminders",headers=self.auth).status_code,401)
         self.assertEqual(self.client.post("/pets/new",data={"name":"X","species":"Katze"},headers=self.auth).status_code,403)
@@ -68,8 +79,25 @@ class PetDiaryTest(unittest.TestCase):
 
     def test_persistence(self):
         self.pet("Persistenz")
-        app2=create_app(dict(TESTING=True,DATA_DIR=self.tmp.name,ADMIN_PASSWORD="test-password-123",API_TOKEN="a"*32,SECRET_KEY="b"*32))
-        self.assertIn(b"Persistenz",app2.test_client().get("/",headers=self.auth).data)
+        app2=create_app(dict(TESTING=True,DATA_DIR=self.tmp.name))
+        client=app2.test_client()
+        self.assertEqual(client.get("/").location,"/login")
+        self.refresh_csrf(client,"/login")
+        self.assertEqual(client.post("/login",data={"csrf":self.csrf,"username":"admin","password":self.password}).status_code,303)
+        self.assertIn(b"Persistenz",client.get("/").data)
+        self.assertEqual(client.get("/api/v1/reminders",headers=self.api).status_code,200)
+
+    def test_setup_login_token_rotation_logout(self):
+        other=self.app.test_client()
+        self.assertEqual(other.get("/setup").location,"/login")
+        r=self.post("/settings",action="revoke",current_password=self.password)
+        self.assertEqual(r.status_code,200)
+        self.assertEqual(self.client.get("/api/v1/reminders",headers=self.api).status_code,401)
+        self.assertEqual(self.post("/logout").location,"/login")
+        self.assertEqual(self.client.get("/").location,"/login")
+        self.refresh_csrf(self.client,"/login")
+        self.assertEqual(self.post("/login",username="admin",password="wrong").status_code,401)
+        self.assertEqual(self.post("/login",username="admin",password=self.password).location,"/")
 
 if __name__=="__main__":
     unittest.main()
