@@ -455,6 +455,9 @@ def create_app(config=None):
             if request.method=="POST":
                 try:
                     d=values(RECORD_FIELDS,("day","valid_from","valid_until","due"))
+                    custom=request.form.get("product_custom","").strip()
+                    if len(custom)>300: raise ValueError("Präparatbezeichnung maximal 300 Zeichen.")
+                    if custom: d["product"]=custom
                     if d["kind"] not in CATEGORIES or not d["title"] or not d["day"]: raise ValueError("Kategorie, Titel und Datum sind Pflicht.")
                     if d["valid_from"] and d["valid_until"] and d["valid_from"]>d["valid_until"]: raise ValueError("Gültigkeitszeitraum prüfen.")
                     if d["weight"]:
