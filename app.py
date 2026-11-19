@@ -1,13 +1,13 @@
 import os
 import hmac
 import sqlite3
-import hashlib
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 from contextlib import contextmanager
 from pathlib import Path
 from flask import Flask, abort, request, render_template, redirect, url_for, Response, jsonify, flash, session
-from werkzeug.http import dump_options_header
+from io import BytesIO
+from flask import send_file
 
 CATEGORIES = {"visit":"Termin", "vaccine":"Impfung", "exam":"Untersuchung", "lab":"Labor/Befund", "med":"Medikament", "worm":"Entwurmung", "weight":"Gewicht", "food":"Ernährung", "note":"Notiz", "reminder":"Erinnerung", "titer":"Tollwut-Antikörpertest", "parasite":"Parasitenbehandlung"}
 PET_FIELDS = ["name","species","breed","birth","sex","color","chip","chip_date","chip_location","tattoo","owner","owner_contact","passport","issuer","issued"]
@@ -97,7 +97,7 @@ def create_app(config=None):
         r.headers["X-Content-Type-Options"]="nosniff"
         r.headers["Referrer-Policy"]="no-referrer"
         r.headers["X-Frame-Options"]="SAMEORIGIN"
-        r.headers["Content-Security-Policy"]="default-src 'self'; style-src 'self'; img-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'self'"
+        r.headers.setdefault("Content-Security-Policy","default-src 'self'; style-src 'self'; img-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'self'")
         if request.endpoint != "static":
             r.headers["Cache-Control"]="no-store"
         return r
@@ -274,9 +274,9 @@ def create_app(config=None):
     def attachment_content(aid):
         with db() as con:
             f=item(con,"attachments",aid)
-        disposition="attachment" if request.args.get("download")=="1" else "inline"
-        response=Response(f["data"],mimetype=f["mime"])
-        response.headers["Content-Disposition"]=dump_options_header(disposition,{"filename":f["name"].encode("ascii","replace").decode(),"filename*":"UTF-8''"+__import__("urllib.parse",fromlist=["quote"]).quote(f["name"],safe="")})
+        response=send_file(BytesIO(f["data"]), mimetype=f["mime"],
+                           as_attachment=request.args.get("download")=="1",
+                           download_name=f["name"], conditional=True)
         response.headers["Content-Security-Policy"]="default-src 'none'; frame-ancestors 'self'"
         return response
 
