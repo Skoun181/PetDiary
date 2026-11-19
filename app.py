@@ -1,11 +1,16 @@
 import os
 import hmac
+import secrets
+import hashlib
+import time
+import threading
+from werkzeug.security import generate_password_hash, check_password_hash
 import sqlite3
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 from contextlib import contextmanager
 from pathlib import Path
-from flask import Flask, abort, request, render_template, redirect, url_for, Response, jsonify, flash, session
+from flask import Flask, abort, request, render_template, redirect, url_for, jsonify, flash, session
 from io import BytesIO
 from flask import send_file
 
@@ -14,6 +19,9 @@ PET_FIELDS = ["name","species","breed","birth","sex","color","chip","chip_date",
 RECORD_FIELDS = ["kind","title","day","vet","notes","product","batch","valid_from","valid_until","due","weight"]
 MAX_FILE = 10 * 1024 * 1024
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS admin_account (id INTEGER PRIMARY KEY CHECK(id=1), username TEXT NOT NULL, password_hash TEXT NOT NULL, session_version TEXT NOT NULL);
+
 CREATE TABLE IF NOT EXISTS pets (
  id INTEGER PRIMARY KEY, name TEXT NOT NULL, species TEXT NOT NULL, breed TEXT, birth TEXT, sex TEXT, color TEXT,
  chip TEXT, chip_date TEXT, chip_location TEXT, tattoo TEXT, owner TEXT, owner_contact TEXT, passport TEXT, issuer TEXT, issued TEXT
@@ -34,18 +42,13 @@ CREATE INDEX IF NOT EXISTS attachments_record ON attachments(record_id);
 
 def create_app(config=None):
     app = Flask(__name__)
-    app.config.update(DATA_DIR=os.getenv("DATA_DIR", "/data"), ADMIN_USER=os.getenv("ADMIN_USER","admin"),
-        ADMIN_PASSWORD=os.getenv("ADMIN_PASSWORD",""), API_TOKEN=os.getenv("API_TOKEN",""),
-        SECRET_KEY=os.getenv("SECRET_KEY",""), TZ=os.getenv("TZ","Europe/Berlin"),
-        MAX_CONTENT_LENGTH=55*1024*1024, SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Strict",
-        SESSION_COOKIE_SECURE=os.getenv("COOKIE_SECURE","0")=="1")
+    app.config.update(DATA_DIR=os.getenv("DATA_DIR", "/data"),
+        TZ=os.getenv("TZ","Europe/Berlin"), MAX_CONTENT_LENGTH=55*1024*1024,
+        SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Strict",
+        SESSION_COOKIE_SECURE=os.getenv("COOKIE_SECURE","0")=="1",
+        PERMANENT_SESSION_LIFETIME=timedelta(days=7))
     if config:
         app.config.update(config)
-    for key in ("ADMIN_PASSWORD","API_TOKEN","SECRET_KEY"):
-        if len(app.config[key]) < (12 if key=="ADMIN_PASSWORD" else 32):
-            raise RuntimeError(key + " fehlt oder ist zu kurz (Passwort 12, Token/Secret 32 Zeichen).")
-    if len({app.config[k] for k in ("ADMIN_PASSWORD","API_TOKEN","SECRET_KEY")}) != 3:
-        raise RuntimeError("Separate Geheimnisse konfigurieren.")
     tz = ZoneInfo(app.config["TZ"])
     folder = Path(app.config["DATA_DIR"])
     folder.mkdir(parents=True, exist_ok=True)
@@ -66,6 +69,22 @@ def create_app(config=None):
     with db() as con:
         con.execute("PRAGMA journal_mode=WAL")
         con.executescript(SCHEMA)
+        con.execute("INSERT OR IGNORE INTO app_settings VALUES ('session_secret',?)",(secrets.token_hex(32),))
+        app.secret_key=con.execute("SELECT value FROM app_settings WHERE key='session_secret'").fetchone()[0]
+        # Import old credentials once, when upgrading from the initial ENV version.
+        old_password=os.getenv("ADMIN_PASSWORD","")
+        if old_password and not con.execute("SELECT 1 FROM admin_account").fetchone():
+            con.execute("INSERT OR IGNORE INTO admin_account VALUES (1,?,?,?)",
+                        (os.getenv("ADMIN_USER","admin"),generate_password_hash(old_password),secrets.token_hex(16)))
+            old_token=os.getenv("API_TOKEN","")
+            if old_token:
+                con.execute("INSERT OR IGNORE INTO app_settings VALUES ('api_token_hash',?)",
+                            (hashlib.sha256(old_token.encode()).hexdigest(),))
+        existing=con.execute("SELECT 1 FROM pets LIMIT 1").fetchone()
+        if existing and not con.execute("SELECT 1 FROM admin_account").fetchone():
+            raise RuntimeError("Bestehende Tierdaten ohne Admin-Konto. Beim ersten Upgrade alte ADMIN_USER/ADMIN_PASSWORD einmalig bereitstellen.")
+    login_lock=threading.Lock()
+    failures=[]
 
     def today():
         return datetime.now(tz).date()
@@ -78,19 +97,127 @@ def create_app(config=None):
             session["csrf"] = os.urandom(32).hex()
         return session["csrf"]
 
+    def account():
+        with db() as con:
+            return con.execute("SELECT * FROM admin_account WHERE id=1").fetchone()
+
+    def signed_in(a):
+        return a is not None and equal(session.get("version",""),a["session_version"])
+
+    def start_session(a):
+        session.clear()
+        session["version"]=a["session_version"]
+        session.permanent=True
+
+    def new_credentials():
+        username=request.form.get("username","").strip()
+        password=request.form.get("password","")
+        if not 1<=len(username)<=80 or not 12<=len(password)<=256:
+            raise ValueError("Benutzername (1–80 Zeichen) und Passwort (12–256 Zeichen) angeben.")
+        if password!=request.form.get("confirm_password",""):
+            raise ValueError("Die Passwörter stimmen nicht überein.")
+        return username,password
+
     @app.before_request
     def auth():
         if request.endpoint in ("health","static"):
             return
         if request.path.startswith("/api/"):
-            if not equal(request.headers.get("Authorization",""), "Bearer "+app.config["API_TOKEN"]):
+            with db() as con:
+                token=con.execute("SELECT value FROM app_settings WHERE key='api_token_hash'").fetchone()
+            supplied=request.headers.get("Authorization","")
+            if not token or not supplied.startswith("Bearer ") or not equal(hashlib.sha256(supplied[7:].encode()).hexdigest(),token[0]):
                 return jsonify(error="Unauthorized"),401
             return
-        a = request.authorization
-        if not a or a.type != "basic" or not equal(a.username,app.config["ADMIN_USER"]) or not equal(a.password,app.config["ADMIN_PASSWORD"]):
-            return Response("Anmeldung erforderlich",401,{"WWW-Authenticate":'Basic realm="PetDiary", charset="UTF-8"'})
-        if request.method == "POST" and (not session.get("csrf") or not equal(request.form.get("csrf",""),session["csrf"])):
+        a=account()
+        if request.method=="POST" and (not session.get("csrf") or not equal(request.form.get("csrf",""),session["csrf"])):
             abort(403)
+        if a is None:
+            if request.endpoint!="setup":
+                return redirect(url_for("setup"),303)
+        elif request.endpoint=="setup":
+            return redirect(url_for("home" if signed_in(a) else "login"),303)
+        elif request.endpoint!="login" and not signed_in(a):
+            return redirect(url_for("login"),303)
+
+    @app.route("/setup",methods=["GET","POST"])
+    def setup():
+        if request.method=="POST":
+            try:
+                username,password=new_credentials()
+                with db() as con:
+                    result=con.execute("INSERT OR IGNORE INTO admin_account VALUES (1,?,?,?)",
+                        (username,generate_password_hash(password),secrets.token_hex(16)))
+                    created=result.rowcount==1
+                if not created:
+                    return redirect(url_for("login"),303)
+                start_session(account())
+                return redirect(url_for("home"),303)
+            except ValueError as e:
+                flash(str(e))
+        return page("setup")
+
+    @app.route("/login",methods=["GET","POST"])
+    def login():
+        a=account()
+        if signed_in(a):
+            return redirect(url_for("home"),303)
+        if request.method=="POST":
+            with login_lock:
+                now=time.monotonic()
+                failures[:]=[t for t in failures if now-t<60]
+                if len(failures)>=5:
+                    return page("login",login_error="Zu viele Anmeldeversuche. Bitte in einer Minute erneut versuchen."),429
+                password=request.form.get("password","")
+                username=request.form.get("username","").strip()
+                valid=bool(a and len(password)<=256 and check_password_hash(a["password_hash"],password) and equal(username,a["username"]))
+                if not valid:
+                    failures.append(now)
+                    return page("login",login_error="Benutzername oder Passwort ist falsch."),401
+                failures.clear()
+            start_session(a)
+            return redirect(url_for("home"),303)
+        return page("login")
+
+    @app.post("/logout")
+    def logout():
+        session.clear()
+        return redirect(url_for("login"),303)
+
+    @app.route("/settings",methods=["GET","POST"])
+    def settings():
+        a=account()
+        new_token=None
+        if request.method=="POST":
+            action=request.form.get("action")
+            if action in ("generate","revoke","password"):
+                password=request.form.get("current_password","")
+                if len(password)>256 or not check_password_hash(a["password_hash"],password):
+                    flash("Aktuelles Passwort ist falsch.")
+                elif action=="password":
+                    try:
+                        username,password=new_credentials()
+                        with db() as con:
+                            con.execute("UPDATE admin_account SET username=?,password_hash=?,session_version=? WHERE id=1",
+                                        (username,generate_password_hash(password),secrets.token_hex(16)))
+                        start_session(account())
+                        flash("Kontodaten aktualisiert. Andere Sitzungen wurden abgemeldet.")
+                    except ValueError as e:
+                        flash(str(e))
+                else:
+                    with db() as con:
+                        if action=="generate":
+                            new_token=secrets.token_urlsafe(32)
+                            con.execute("INSERT OR REPLACE INTO app_settings VALUES ('api_token_hash',?)",
+                                        (hashlib.sha256(new_token.encode()).hexdigest(),))
+                        else:
+                            con.execute("DELETE FROM app_settings WHERE key='api_token_hash'")
+                            flash("API-Token widerrufen.")
+            else:
+                abort(400)
+        with db() as con:
+            token_active=con.execute("SELECT 1 FROM app_settings WHERE key='api_token_hash'").fetchone() is not None
+        return page("settings",username=account()["username"],token_active=token_active,new_token=new_token)
 
     @app.after_request
     def headers(r):
