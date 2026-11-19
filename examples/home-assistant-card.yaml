@@ -1,0 +1,15 @@
+# Manuelle Markdown-Karte im Dashboard. Entity-ID ggf. anpassen.
+type: markdown
+title: 🐾 PetDiary
+content: >
+  {% set rows = state_attr('sensor.petdiary_erinnerungen','reminders') %}
+  {% if rows is none %}
+  PetDiary derzeit nicht verfügbar.
+  {% elif not rows %}
+  Keine offenen Erinnerungen in den nächsten 30 Tagen.
+  {% else %}
+  {% for r in rows %}
+  - **{{ r.pet }}:** {{ r.title }} – {{ r.due }}
+    {% if r.days_left < 0 %}(überfällig){% elif r.days_left == 0 %}(heute){% else %}(in {{ r.days_left }} Tagen){% endif %}
+  {% endfor %}
+  {% endif %}
