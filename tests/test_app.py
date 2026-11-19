@@ -165,5 +165,61 @@ class PetDiaryTest(unittest.TestCase):
         self.assertIn(b"Behalten",self.client.get(a).data)
         self.assertEqual(self.client.get("/api/v1/reminders",headers=self.api).status_code,200)
 
+    def test_given_medication_without_clock_duration(self):
+        p=self.pet()
+        r=self.post(p+"/records/new",kind="med",title="Praxisgabe",day="2026-12-01",
+                    product="Test A",dose="1",dose_unit="ml")
+        self.assertEqual(r.status_code,303)
+        self.assertIn(b"Verabreicht",self.client.get(p).data)
+        self.assertEqual(self.client.get("/api/v1/medications?start=2026-12-01&days=1",headers=self.api).get_json()["count"],0)
+
+    def test_multiple_meds_per_visit_and_edit(self):
+        p=self.pet()
+        form=dict(kind="visit",title="Tierarztbesuch",day="2026-12-01",vet="Test",
+                  extra_present="1",extra_key=["0","1","2"],
+                  extra_0_product="Praxis A",extra_0_dose="1",extra_0_dose_unit="ml",extra_0_mode="given",
+                  extra_1_product="Plan B",extra_1_day="2026-12-02",extra_1_mode="plan",
+                  extra_1_dose="1",extra_1_dose_unit="Tablette",extra_1_duration="2",extra_1_clock=["08:00","20:00"],
+                  extra_2_product="Plan C",extra_2_day="2026-12-03",extra_2_mode="plan",
+                  extra_2_dose="0,5",extra_2_dose_unit="ml",extra_2_duration="3")
+        self.assertEqual(self.post(p+"/records/new",**form).status_code,303)
+        url="/api/v1/medications?start=2026-12-01&days=7"
+        result=self.client.get(url,headers=self.api).get_json()
+        self.assertEqual(result["count"],7)
+        self.assertEqual({m["product"] for m in result["medications"]},{"Plan B","Plan C"})
+        b=next(m for m in result["medications"] if m["product"]=="Plan B")
+        c=next(m for m in result["medications"] if m["product"]=="Plan C")
+        self.assertEqual(b["entry_id"],c["entry_id"])
+        self.assertNotEqual(b["record_id"],c["record_id"])
+        self.assertIsNone(c["scheduled_at"])
+        self.assertEqual(c["time"],"")
+        self.assertIn(b"Praxis A",self.client.get(p+"?kind=med").data)
+        self.assertIn(b"Ohne Uhrzeit",self.client.get("/?week=2026-12-01").data)
+        self.assertEqual(self.post(f"/medications/{c['record_id']}/check",day=c["day"],clock="",action="mark").status_code,303)
+        self.assertEqual(self.client.get(url,headers=self.api).get_json()["count"],6)
+        entry=b["entry_id"]
+        edit=p+f"/records/{entry}/edit"
+        self.assertEqual(self.client.get(edit).status_code,200)
+        import sqlite3
+        from pathlib import Path
+        with sqlite3.connect(Path(self.tmp.name)/"petdiary.sqlite3") as con:
+            a=con.execute("SELECT id FROM records WHERE product='Praxis A'").fetchone()[0]
+        form.update(extra_0_id=str(a),extra_1_id=str(b["record_id"]),extra_2_id=str(c["record_id"]),notes="Kontrolle")
+        self.assertEqual(self.post(edit,**form).status_code,303)
+        self.assertEqual(self.client.get(url,headers=self.api).get_json()["count"],6)
+        form["extra_key"]=["0","2"]
+        self.assertEqual(self.post(edit,**form).status_code,303)
+        self.assertEqual(self.client.get(url,headers=self.api).get_json()["count"],2)
+        self.assertEqual(self.post(f"/records/{entry}/delete").status_code,303)
+        self.assertEqual(self.client.get(url,headers=self.api).get_json()["count"],0)
+
+    def test_validation_keeps_unsaved_extra_fields(self):
+        p=self.pet()
+        r=self.post(p+"/records/new",kind="visit",title="",day="2026-12-01",
+                    extra_present="1",extra_key="0",extra_0_product="Ungespeicherte Gabe",extra_0_mode="given")
+        self.assertEqual(r.status_code,200)
+        self.assertIn(b"Ungespeicherte Gabe",r.data)
+        self.assertNotIn(b"Ungespeicherte Gabe",self.client.get(p).data)
+
 if __name__=="__main__":
     unittest.main()
