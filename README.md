@@ -51,7 +51,7 @@ Mit GitHub CLI, auch bei Anmeldung über Google:
 
 ```sh
 gh auth login
-gh repo clone Skoun181/PetDiary -- --branch v0.0.1
+gh repo clone Skoun181/PetDiary -- --branch release/0.0.1
 cd PetDiary
 docker compose up -d --build
 ```
@@ -59,7 +59,7 @@ docker compose up -d --build
 Alternativ mit eingerichtetem Git-Zugriff:
 
 ```sh
-git clone --branch v0.0.1 https://github.com/Skoun181/PetDiary.git
+git clone --branch release/0.0.1 https://github.com/Skoun181/PetDiary.git
 cd PetDiary
 docker compose up -d --build
 ```
@@ -122,7 +122,7 @@ Das Pull-Kommando lädt nur das Image, startet aber keinen Container. Verwende d
 
 **Nach Registry-Veröffentlichung:** Schritte 2–4 mit unveränderter Stack-Vorlage; vorher ggf. die private GHCR-Registry in Portainer konfigurieren.
 
-Optional kann ein Git-Stack mit der Repository-URL, Referenz `refs/heads/v0.0.1`, privaten Git-Zugangsdaten und Compose-Pfad `compose.yaml` eingerichtet werden, sofern die jeweilige Portainer-Installation Builds aus Git-Kontext unterstützt. Der lokal gebaute Image-Stack ist die Alternative.
+Optional kann ein Git-Stack mit der Repository-URL, Referenz `refs/heads/release/0.0.1`, privaten Git-Zugangsdaten und Compose-Pfad `compose.yaml` eingerichtet werden, sofern die jeweilige Portainer-Installation Builds aus Git-Kontext unterstützt. Der lokal gebaute Image-Stack ist die Alternative.
 
 Offizielle Anleitung: [Portainer – Add a new stack](https://docs.portainer.io/user/docker/stacks/add).
 
@@ -132,7 +132,7 @@ Offizielle Anleitung: [Portainer – Add a new stack](https://docs.portainer.io/
 
 1. In Dockhand unter **Settings → Git** die Zugangsdaten für das private Repository hinterlegen.
 2. Unter **Stacks** einen Git-Stack mit der URL `https://github.com/Skoun181/PetDiary.git` erstellen.
-3. Branch `v0.0.1`, Compose-Datei `compose.yaml`, Kontextverzeichnis Repository-Wurzel einstellen.
+3. Branch `release/0.0.1`, Compose-Datei `compose.yaml`, Kontextverzeichnis Repository-Wurzel einstellen.
 4. **Build images on deploy** aktivieren (notwendig für build: .) und deployen. Beim Einsatz eines Remote-Agenten Build-Unterstützung prüfen.
 
 Alternativ Methode A nur bis zum lokalen Build ausführen und einen manuellen Stack mit der Stack-Vorlage und `image: petdiary:local` anlegen.
@@ -197,7 +197,7 @@ docker compose exec -T petdiary rm /data/backup.sqlite3
 
 Backup geschützt aufbewahren: Es enthält auch die Anmelde-Hashes und das Session-Geheimnis. Für Restore Container stoppen, Datenbank in einem separaten Test-Volume wiederherstellen, Rechte UID/GID 10001 sicherstellen und erst nach Prüfung das Produktiv-Volume ersetzen. Nie `docker compose down -v` verwenden, wenn die Daten erhalten bleiben sollen.
 
-Updates: Erst Backup anlegen und Volume beibehalten. Im bisherigen Projektordner einer Entwicklungsinstallation `git fetch origin && git switch v0.0.1` (wenn der Branch noch nicht lokal existiert, `git switch --track origin/v0.0.1`), dann `docker compose up -d --build`. Bei einer bestehenden Installation auf dem Release-Branch `git pull && docker compose up -d --build`. Bei einem veröffentlichten Image Versions-Tag bewusst aktualisieren, `docker compose pull && docker compose up -d`. Der Compose-Projektname bestimmt den Volume-Namen; nicht versehentlich einen zweiten Stack mit leerem Volume anlegen. Ressourcenverbrauch live mit `docker stats petdiary` messen. Keine validierten RAM-, Durchsatz- oder Stabilitätsbenchmarks vorhanden.
+Updates: Erst Backup anlegen und Volume beibehalten. Im bisherigen Projektordner einer Entwicklungsinstallation `git fetch origin && git switch release/0.0.1` (wenn der Branch noch nicht lokal existiert, `git switch --track origin/release/0.0.1`), dann `docker compose up -d --build`. Bei einer bestehenden Installation auf dem Release-Branch `git pull && docker compose up -d --build`. Bei einem veröffentlichten Image Versions-Tag bewusst aktualisieren, `docker compose pull && docker compose up -d`. Der Compose-Projektname bestimmt den Volume-Namen; nicht versehentlich einen zweiten Stack mit leerem Volume anlegen. Ressourcenverbrauch live mit `docker stats petdiary` messen. Keine validierten RAM-, Durchsatz- oder Stabilitätsbenchmarks vorhanden.
 
 ### Fehlersuche
 
@@ -222,7 +222,7 @@ Die Tests nutzen eine temporäre Datenbank. Sie decken Grundfunktionen ab, erset
 
 ## Veröffentlichung (Maintainer)
 
-Siehe [Release-Anleitung](docs/RELEASE.md) für Tests, GitHub-Tag/Prerelease und manuelle Multiarch-Registry-Veröffentlichung. Der Repository-Branch v0.0.1 ist kein Git-Tag und kein veröffentlichtes Registry-Image.
+Siehe [Release-Anleitung](docs/RELEASE.md) für Tests, GitHub-Tag/Prerelease und manuelle Multiarch-Registry-Veröffentlichung. Der Repository-Branch release/0.0.1 ist kein Git-Tag und kein veröffentlichtes Registry-Image.
 
 ## Referenzen
 
