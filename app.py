@@ -13,10 +13,11 @@ from pathlib import Path
 from flask import Flask, abort, request, render_template, redirect, url_for, jsonify, flash, session
 from io import BytesIO
 from flask import send_file
+from catalog import BREEDS, COLORS, SEX, CHIP_LOCATIONS, TATTOO_LOCATIONS, PRODUCTS
 
 CATEGORIES = {"visit":"Termin", "vaccine":"Impfung", "exam":"Untersuchung", "lab":"Labor/Befund", "med":"Medikament", "worm":"Entwurmung", "weight":"Gewicht", "food":"Ernährung", "note":"Notiz", "reminder":"Erinnerung", "titer":"Tollwut-Antikörpertest", "parasite":"Parasitenbehandlung"}
-PET_FIELDS = ["name","species","breed","birth","sex","color","chip","chip_date","chip_location","tattoo","owner","owner_contact","passport","issuer","issued"]
-RECORD_FIELDS = ["kind","title","day","vet","notes","product","batch","valid_from","valid_until","due","weight"]
+PET_FIELDS = ["name","species","breed","birth","sex","color","chip","chip_date","chip_location","tattoo","owner","owner_contact","passport","issuer","issued","features","tattoo_location"]
+RECORD_FIELDS = ["kind","title","day","vet","notes","product","batch","valid_from","valid_until","due","weight","dose","dose_unit","duration","dose_times"]
 MAX_FILE = 10 * 1024 * 1024
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -38,6 +39,9 @@ CREATE TABLE IF NOT EXISTS attachments (
  name TEXT NOT NULL, mime TEXT NOT NULL, data BLOB NOT NULL
 );
 CREATE INDEX IF NOT EXISTS attachments_record ON attachments(record_id);
+CREATE TABLE IF NOT EXISTS pet_photos (pet_id INTEGER PRIMARY KEY REFERENCES pets(id) ON DELETE CASCADE, mime TEXT NOT NULL, data BLOB NOT NULL);
+CREATE TABLE IF NOT EXISTS products (name TEXT PRIMARY KEY COLLATE NOCASE);
+CREATE TABLE IF NOT EXISTS dose_checks (record_id INTEGER NOT NULL REFERENCES records(id) ON DELETE CASCADE, day TEXT NOT NULL, clock TEXT NOT NULL, PRIMARY KEY(record_id,day,clock));
 """
 
 def create_app(config=None):
@@ -69,6 +73,13 @@ def create_app(config=None):
     with db() as con:
         con.execute("PRAGMA journal_mode=WAL")
         con.executescript(SCHEMA)
+        con.execute("BEGIN IMMEDIATE")
+        for table, additions in (("pets", ("features","tattoo_location")), ("records", ("dose","dose_unit","duration","dose_times"))):
+            known={row["name"] for row in con.execute("PRAGMA table_info("+table+")")}
+            for col in additions:
+                if col not in known:
+                    con.execute("ALTER TABLE "+table+" ADD COLUMN "+col+" TEXT NOT NULL DEFAULT ''")
+        con.executemany("INSERT OR IGNORE INTO products(name) VALUES (?)",[(p,) for p in PRODUCTS])
         con.execute("INSERT OR IGNORE INTO app_settings VALUES ('session_secret',?)",(secrets.token_hex(32),))
         app.secret_key=con.execute("SELECT value FROM app_settings WHERE key='session_secret'").fetchone()[0]
         # Import old credentials once, when upgrading from the initial ENV version.
@@ -230,7 +241,7 @@ def create_app(config=None):
         return r
 
     def page(screen, **kwargs):
-        return render_template("index.html",screen=screen,categories=CATEGORIES,csrf=csrf(),today=today().isoformat(),**kwargs)
+        return render_template("index.html",screen=screen,categories=CATEGORIES,csrf=csrf(),today=today().isoformat(),breeds=BREEDS,colors=COLORS,sex_options=SEX,chip_locations=CHIP_LOCATIONS,tattoo_locations=TATTOO_LOCATIONS,**kwargs)
 
     def item(con,table,pk):
         # table is chosen solely by server code
@@ -268,12 +279,81 @@ def create_app(config=None):
             con.execute("SELECT 1 FROM pets LIMIT 1").fetchone()
         return {"status":"ok"}
 
+    def medication_rows(con, start, end, pid=None):
+        sql="""SELECT r.*, p.name AS pet FROM records r JOIN pets p ON p.id=r.pet_id
+               WHERE r.kind='med' AND r.duration!='' AND r.dose_times!='' AND r.day<=?"""
+        args=[end.isoformat()]
+        if pid is not None:
+            sql+=" AND r.pet_id=?"
+            args.append(pid)
+        checks={(r["record_id"],r["day"],r["clock"]) for r in con.execute("SELECT * FROM dose_checks WHERE day BETWEEN ? AND ?",(start.isoformat(),end.isoformat()))}
+        result=[]
+        for r in con.execute(sql,args):
+            first=date.fromisoformat(r["day"])
+            last=first+timedelta(days=int(r["duration"])-1)
+            current=max(start,first)
+            while current<=min(end,last):
+                day=current.isoformat()
+                for clock in r["dose_times"].split(","):
+                    moment=datetime.fromisoformat(day+"T"+clock).replace(tzinfo=tz)
+                    result.append(dict(id=f'{r["id"]}:{day}:{clock}',record_id=r["id"],pet_id=r["pet_id"],pet=r["pet"],title=r["title"],product=r["product"],dose=r["dose"],unit=r["dose_unit"],day=day,time=clock,scheduled_at=moment.isoformat(),done=(r["id"],day,clock) in checks))
+                current+=timedelta(days=1)
+        return sorted(result,key=lambda r:(r["day"],r["time"],r["pet"],r["record_id"]))
+
+    @app.get("/api/v1/medications")
+    def api_medications():
+        try:
+            days=int(request.args.get("days","7"))
+            start=date.fromisoformat(request.args.get("start",today().isoformat()))
+            if not 1<=days<=31: raise ValueError()
+            end=start+timedelta(days=days-1)
+        except (ValueError,OverflowError):
+            return jsonify(error="days must be 1..31 and start YYYY-MM-DD"),400
+        with db() as con:
+            rows=medication_rows(con,start,end)
+        now=datetime.now(tz)
+        pending=[r for r in rows if not r["done"]]
+        future=[r for r in pending if datetime.fromisoformat(r["scheduled_at"]).timestamp()>=now.timestamp()]
+        due=[r for r in pending if datetime.fromisoformat(r["scheduled_at"]).timestamp()<=now.timestamp()]
+        return jsonify(count=len(pending),due_count=len(due),next=future[0] if future else None,medications=rows,timezone=app.config["TZ"])
+
+    @app.post("/medications/<int:rid>/check")
+    def medication_check(rid):
+        try:
+            day=date.fromisoformat(request.form.get("day",""))
+            clock=request.form.get("clock","")
+        except ValueError:
+            abort(400)
+        with db() as con:
+            r=item(con,"records",rid)
+            if r["kind"]!="med" or not r["duration"] or clock not in r["dose_times"].split(",") or not date.fromisoformat(r["day"])<=day<=date.fromisoformat(r["day"])+timedelta(days=int(r["duration"])-1):
+                abort(400)
+            if request.form.get("action")=="undo":
+                con.execute("DELETE FROM dose_checks WHERE record_id=? AND day=? AND clock=?",(rid,day.isoformat(),clock))
+            elif request.form.get("action")=="mark":
+                con.execute("INSERT OR IGNORE INTO dose_checks VALUES (?,?,?)",(rid,day.isoformat(),clock))
+            else: abort(400)
+        return redirect(url_for("home",week=request.form.get("week",day.isoformat()),pet=request.form.get("pet","")),303)
+
     @app.get("/")
     def home():
         with db() as con:
-            pets = [dict(r) for r in con.execute("SELECT * FROM pets ORDER BY name,id")]
+            pets = [dict(r) for r in con.execute("SELECT p.*, EXISTS(SELECT 1 FROM pet_photos WHERE pet_id=p.id) AS has_photo FROM pets p ORDER BY name,id")]
             reminders = reminder_rows(con,30)
-        return page("home",pets=pets,reminders=reminders)
+            try:
+                selected=date.fromisoformat(request.args.get("week",today().isoformat()))
+                monday=selected-timedelta(days=selected.weekday())
+                sunday=monday+timedelta(days=6)
+                previous=(monday-timedelta(days=7)).isoformat()
+                following=(monday+timedelta(days=7)).isoformat()
+                selected_pet=int(request.args["pet"]) if request.args.get("pet") else None
+            except (ValueError,OverflowError):
+                abort(400)
+            rows=medication_rows(con,monday,sunday,selected_pet)
+            calendar=[dict(day=(monday+timedelta(days=i)).isoformat(),label=["Mo","Di","Mi","Do","Fr","Sa","So"][i],items=[]) for i in range(7)]
+            for row in rows:
+                calendar[(date.fromisoformat(row["day"])-monday).days]["items"].append(row)
+        return page("home",pets=pets,reminders=reminders,calendar=calendar,week=monday.isoformat(),previous=previous,following=following,selected_pet=selected_pet)
 
     @app.get("/reminders")
     def reminders():
@@ -289,15 +369,36 @@ def create_app(config=None):
                 try:
                     d=values(PET_FIELDS,("birth","chip_date","issued"))
                     if not d["name"] or not d["species"]: raise ValueError("Name und Tierart sind Pflicht.")
+                    photo=request.files.get("photo")
+                    photo_data=None
+                    if photo and photo.filename:
+                        data=photo.stream.read(5*1024*1024+1)
+                        if len(data)>5*1024*1024: raise ValueError("Profilbild maximal 5 MB.")
+                        if data.startswith(bytes.fromhex("ffd8ff")): mime="image/jpeg"
+                        elif data.startswith(bytes.fromhex("89504e470d0a1a0a")): mime="image/png"
+                        elif data[:4]==b"RIFF" and data[8:12]==b"WEBP": mime="image/webp"
+                        else: raise ValueError("Nur JPEG, PNG und WebP als Profilbild.")
+                        photo_data=(mime,data)
                     if pid is None:
                         pid=con.execute("INSERT INTO pets ("+",".join(PET_FIELDS)+") VALUES ("+",".join("?" for _ in PET_FIELDS)+")",list(d.values())).lastrowid
                     else:
                         con.execute("UPDATE pets SET "+",".join(k+"=?" for k in PET_FIELDS)+" WHERE id=?",[*d.values(),pid])
+                    if photo_data:
+                        con.execute("INSERT OR REPLACE INTO pet_photos VALUES (?,?,?)",(pid,*photo_data))
+                    elif request.form.get("remove_photo")=="yes":
+                        con.execute("DELETE FROM pet_photos WHERE pet_id=?",(pid,))
                     return redirect(url_for("pet_detail",pid=pid),303)
                 except ValueError as e:
                     flash(str(e),"error")
                     pet={**pet,**request.form.to_dict()}
-            return page("pet_edit",pet=pet,pid=pid)
+            return page("pet_edit",pet=pet,pid=pid,has_photo=bool(con.execute("SELECT 1 FROM pet_photos WHERE pet_id=?",(pid,)).fetchone()))
+
+    @app.get("/pets/<int:pid>/photo")
+    def pet_photo(pid):
+        with db() as con:
+            row=con.execute("SELECT mime,data FROM pet_photos WHERE pet_id=?",(pid,)).fetchone()
+        if row is None: abort(404)
+        return send_file(BytesIO(row["data"]),mimetype=row["mime"],conditional=True)
 
     @app.post("/pets/<int:pid>/delete")
     def pet_delete(pid):
@@ -313,6 +414,7 @@ def create_app(config=None):
         category=request.args.get("kind","")
         with db() as con:
             pet=item(con,"pets",pid)
+            pet["has_photo"]=bool(con.execute("SELECT 1 FROM pet_photos WHERE pet_id=?",(pid,)).fetchone())
             rows=con.execute("SELECT * FROM records WHERE pet_id=? ORDER BY day DESC,id DESC",(pid,))
             records=[dict(r) for r in rows]
             files=con.execute("SELECT a.id,a.record_id,a.name,a.mime FROM attachments a JOIN records r ON r.id=a.record_id WHERE r.pet_id=? ORDER BY a.id",(pid,))
@@ -363,18 +465,42 @@ def create_app(config=None):
                         d["due"]=d["valid_until"]
                     if d["kind"]=="visit" and not d["due"] and d["day"]>=today().isoformat():
                         d["due"]=d["day"]
+                    if d["kind"]=="med":
+                        clocks=[v.strip() for v in request.form.getlist("dose_clock") if v.strip()]
+                        if not clocks and d["dose_times"]:
+                            clocks=[v.strip() for v in d["dose_times"].split(",") if v.strip()]
+                        if d["duration"] or clocks or d["dose"] or d["dose_unit"]:
+                            if not d["product"] or not d["dose"] or not d["dose_unit"] or not clocks or not d["duration"]:
+                                raise ValueError("Für einen Medikamentenplan Präparat, Menge, Einheit, Tage und mindestens eine Uhrzeit eintragen.")
+                            dose=float(d["dose"].replace(",","."))
+                            if not 0<dose<1000000: raise ValueError("Ungültige Menge.")
+                            duration=int(d["duration"])
+                            if not 1<=duration<=3660: raise ValueError("Kurdauer muss 1–3660 Tage betragen.")
+                            if len(clocks)>12: raise ValueError("Maximal 12 Uhrzeiten pro Tag.")
+                            normalized=sorted({datetime.strptime(c,"%H:%M").strftime("%H:%M") for c in clocks})
+                            date.fromisoformat(d["day"])+timedelta(days=duration-1)
+                            d["duration"]=str(duration)
+                            d["dose_times"]=",".join(normalized)
+                            d["dose"]=d["dose"].replace(",",".")
+                    else:
+                        for k in ("dose","dose_unit","duration","dose_times"): d[k]=""
                     uploads=read_files()
                     if rid is None:
                         rid=con.execute("INSERT INTO records (pet_id,"+",".join(RECORD_FIELDS)+") VALUES ("+",".join("?" for _ in range(len(RECORD_FIELDS)+1))+")",[pid,*d.values()]).lastrowid
                     else:
                         done=record["done"] if record["due"]==d["due"] else 0
                         con.execute("UPDATE records SET "+",".join(k+"=?" for k in RECORD_FIELDS)+",done=? WHERE id=?",[*d.values(),done,rid])
+                    if d["product"]:
+                        con.execute("INSERT OR IGNORE INTO products(name) VALUES (?)",(d["product"],))
+                    if record.get("id") and any(record.get(k,"")!=d[k] for k in ("kind","day","duration","dose_times","product","dose","dose_unit")):
+                        con.execute("DELETE FROM dose_checks WHERE record_id=?",(rid,))
                     con.executemany("INSERT INTO attachments(record_id,name,mime,data) VALUES (?,?,?,?)",[(rid,*f) for f in uploads])
                     return redirect(url_for("pet_detail",pid=pid),303)
-                except ValueError as e:
+                except (ValueError,OverflowError) as e:
                     flash(str(e),"error")
-                    record={**record,**request.form.to_dict()}
-            return page("record_edit",pet=pet,record=record,rid=rid,files=files)
+                    record={**record,**request.form.to_dict(),"dose_times":",".join(request.form.getlist("dose_clock")) or request.form.get("dose_times","")}
+            products=[r[0] for r in con.execute("SELECT name FROM products ORDER BY name COLLATE NOCASE")]
+            return page("record_edit",pet=pet,record=record,rid=rid,files=files,products=products)
 
     @app.post("/records/<int:rid>/delete")
     def record_delete(rid):
