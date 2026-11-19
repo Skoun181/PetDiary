@@ -136,5 +136,17 @@ class PetDiaryTest(unittest.TestCase):
         self.assertEqual(self.client.get(url).status_code,401)
         self.assertEqual(self.client.get("/api/v1/medications?days=32",headers=self.api).status_code,400)
 
+    def test_custom_product_overrides_selection(self):
+        p=self.pet()
+        form=self.client.get(p+"/records/new?kind=med").data
+        self.assertIn(b"Milpro 16 mg/40 mg",form)
+        self.assertIn(b"product_custom",form)
+        r=self.post(p+"/records/new",kind="med",title="Test",day="2026-12-01",product="Milpro",
+                    product_custom="Eigene Variante 123",dose="1",dose_unit="Tablette",duration="1",dose_clock="08:00")
+        self.assertEqual(r.status_code,303)
+        result=self.client.get("/api/v1/medications?start=2026-12-01&days=1",headers=self.api).get_json()
+        self.assertEqual(result["medications"][0]["product"],"Eigene Variante 123")
+        self.assertIn(b"Eigene Variante 123",self.client.get(p+"/records/new").data)
+
 if __name__=="__main__":
     unittest.main()
