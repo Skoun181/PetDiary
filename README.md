@@ -1,8 +1,17 @@
-# 🐾 PetDiary
+# 🐾 PetDiary 0.0.1
+
+**Self-hosted · Docker · SQLite · Home Assistant**
+
 
 Private, ressourcenschonende Tiergesundheitsakte für den eigenen Docker-Server. Keine Cloud, kein JavaScript-Framework, keine zusätzliche Datenbank. Deutschsprachige Weboberfläche in Mintgrün und Petrol, inspiriert von modernen Tiergesundheits-Apps.
 
-**Status:** erste Entwicklungsfassung 0.1; vor produktiver Nutzung testen. Ein lokales Administratorkonto pro Installation; keine Mehrbenutzerverwaltung.
+**Status:** erste Vorabversion 0.0.1 im Quellcode; Docker-Build, Integrationstests und Registry-Image noch zu verifizieren. Ein lokales Administratorkonto pro Installation; keine Mehrbenutzerverwaltung.
+
+[📖 Bebilderte Bedienungsanleitung](docs/USER_GUIDE.md) · [🔑 Passwort zurücksetzen](docs/PASSWORD_RESET.md) · [Änderungen](CHANGELOG.md)
+
+![Gesundheitsakte – schematische Illustration](docs/images/tierakte.svg)
+
+Die Illustrationen zeigen fiktive Beispieldaten, keine live aufgenommenen Screenshots.
 
 ## Funktionen
 
@@ -34,25 +43,123 @@ GET /api/v1/medications?days=7 liefert geplante Gaben ab dem heutigen Tag (optio
 
 ## Installation
 
-Voraussetzung: Docker und Docker Compose v2. Das Repository ist privat; zum Klonen ist GitHub-Zugriff erforderlich.
+Voraussetzungen: Docker Engine, Docker Compose v2 bei Compose-Installationen, freier Port 8080. Kein externer Datenbankdienst und keine Pflicht-.env. Die Erstkonfiguration erfolgt im Browser. Der Quellcode ist derzeit privat; Git-Downloads erfordern gültigen GitHub-Zugriff.
+
+### A. Aus dem Git-Repository installieren (sofort verfügbar)
+
+Mit GitHub CLI, auch bei Anmeldung über Google:
 
 ```sh
-git clone -b petdiary-v0.1 https://github.com/Skoun181/PetDiary.git
+gh auth login
+gh repo clone Skoun181/PetDiary -- --branch v0.0.1
 cd PetDiary
 docker compose up -d --build
 ```
 
-Öffne http://SERVER-IP:8080 im Browser. Beim ersten Aufruf legst du ein lokales Administratorkonto an (Passwort mindestens 12 Zeichen). Es gibt keine Standard-Zugangsdaten und keine benötigte .env. Das Session-Geheimnis wird automatisch erzeugt und zusammen mit dem Passwort-Hash im persistenten Datenvolume gespeichert. Danach ist die Ersteinrichtung gesperrt und du meldest dich über die normale Login-Seite an. Unter Einstellungen kannst du Kontodaten ändern, dich abmelden und einen Home-Assistant-API-Token erzeugen oder widerrufen.
+Alternativ mit eingerichtetem Git-Zugriff:
 
-**Sicherheit:** Der Compose-Port ist standardmäßig im Netzwerk erreichbar. Der erste Besucher kann das noch nicht eingerichtete Konto beanspruchen. Führe die Ersteinrichtung in einem vertrauenswürdigen Netzwerk durch; bei Bedarf Port zunächst auf 127.0.0.1:8080:8080 beschränken und per SSH-Tunnel einrichten. Für dauerhaften Netzwerkzugriff HTTPS-Reverse-Proxy verwenden und optional COOKIE_SECURE=1 als Compose-Umgebungsvariable setzen; keine ungeschützte Internetfreigabe.
+```sh
+git clone --branch v0.0.1 https://github.com/Skoun181/PetDiary.git
+cd PetDiary
+docker compose up -d --build
+```
 
-### Bereits vorhandene Installation der ENV-Version
+Die mitgelieferte [compose.yaml](compose.yaml) baut das Image lokal. Sie verwendet einen benannten Docker-Datenträger unter /data. Für bestehende Entwicklungsinstallationen den bisherigen Projektordner und das bisherige Volume beibehalten; siehe Updates unten.
 
-Vor dem Upgrade ein Backup anlegen. Wenn bereits Tierdaten vorhanden sind, müssen beim ersten Start der neuen Version die bisherigen ADMIN_USER, ADMIN_PASSWORD und API_TOKEN einmalig als Umgebungsvariablen über ein temporäres Compose-Override explizit bereitgestellt werden. Die alte .env allein wird nicht automatisch an den Container übergeben. Die Zugangsdaten werden beim ersten Start als Hashes übernommen und bestehende Sitzungen verworfen; danach das Override und die ENV-Zugangsdaten entfernen. Ohne Admin-Konto und mit bestehenden Tierdaten verweigert die Anwendung den Start, damit niemand die bestehende Akte per Ersteinrichtung übernehmen kann.
+### B. Nur Docker Compose YAML (nach Registry-Veröffentlichung)
 
-### Geplante Installation per fertigem Image
+**Status:** Das folgende Registry-Image ist eine vorbereitete Zieladresse, noch nicht veröffentlicht oder verifiziert. Bis dahin Methode A verwenden. Falls der Maintainer das Paket privat veröffentlicht, zuerst mit berechtigtem GitHub-Token am Registry-Host anmelden; bei einem bewusst öffentlich freigegebenen Paket entfällt dies.
 
-Sobald ein Docker-Image in einer Registry veröffentlicht ist, entfällt auch das Klonen und Bauen. Die Compose-Datei benötigt dann nur Image, Port, persistentes Volume und Restart-Policy. Ein öffentlich zugängliches Registry-Image wurde noch nicht veröffentlicht.
+Erstelle eine Datei `docker-compose.yaml` mit dem Inhalt der [Stack-Vorlage](deploy/compose.yaml):
+
+```yaml
+services:
+  petdiary:
+    image: ghcr.io/skoun181/petdiary:0.0.1
+    container_name: petdiary
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - petdiary-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    init: true
+volumes:
+  petdiary-data:
+```
+
+```sh
+docker compose up -d
+```
+
+### C. Docker Pull / Docker Run (nach Registry-Veröffentlichung)
+
+```sh
+docker pull ghcr.io/skoun181/petdiary:0.0.1
+docker run -d --name petdiary --restart unless-stopped \
+  -p 8080:8080 -v petdiary-data:/data \
+  --read-only --tmpfs /tmp:size=64m,mode=1777 \
+  --cap-drop ALL --security-opt no-new-privileges:true --init \
+  ghcr.io/skoun181/petdiary:0.0.1
+```
+
+Das Pull-Kommando lädt nur das Image, startet aber keinen Container. Verwende die Run-Anweisung für den Start. Nicht parallel zur Compose-Installation ausführen; Containername und Port würden kollidieren.
+
+### D. Portainer (Docker Standalone)
+
+**Jetzt verfügbar – Image lokal bauen:**
+
+1. Auf dem Ziel-Docker-Host das Repository wie in A klonen. Im Projektordner `docker compose build` (noch nicht up) ausführen. Dadurch entsteht `petdiary:local`.
+2. In Portainer den entsprechenden Docker-Standalone-Endpunkt wählen, **Stacks → Add stack → Web editor**.
+3. Stackname `petdiary` eingeben. Inhalt der [Stack-Vorlage](deploy/compose.yaml) einfügen und die Image-Zeile auf `image: petdiary:local` ändern. Kein erzwungenes erneutes Pull aktivieren.
+4. **Deploy the stack**. Im Browser Port 8080 aufrufen.
+
+**Nach Registry-Veröffentlichung:** Schritte 2–4 mit unveränderter Stack-Vorlage; vorher ggf. die private GHCR-Registry in Portainer konfigurieren.
+
+Optional kann ein Git-Stack mit der Repository-URL, Referenz `refs/heads/v0.0.1`, privaten Git-Zugangsdaten und Compose-Pfad `compose.yaml` eingerichtet werden, sofern die jeweilige Portainer-Installation Builds aus Git-Kontext unterstützt. Der lokal gebaute Image-Stack ist die Alternative.
+
+Offizielle Anleitung: [Portainer – Add a new stack](https://docs.portainer.io/user/docker/stacks/add).
+
+### E. Dockhand
+
+**Jetzt verfügbar – Git-Stack:**
+
+1. In Dockhand unter **Settings → Git** die Zugangsdaten für das private Repository hinterlegen.
+2. Unter **Stacks** einen Git-Stack mit der URL `https://github.com/Skoun181/PetDiary.git` erstellen.
+3. Branch `v0.0.1`, Compose-Datei `compose.yaml`, Kontextverzeichnis Repository-Wurzel einstellen.
+4. **Build images on deploy** aktivieren (notwendig für build: .) und deployen. Beim Einsatz eines Remote-Agenten Build-Unterstützung prüfen.
+
+Alternativ Methode A nur bis zum lokalen Build ausführen und einen manuellen Stack mit der Stack-Vorlage und `image: petdiary:local` anlegen.
+
+**Nach Registry-Veröffentlichung:** Unter Stacks **Create stack**, Name `petdiary`, unveränderte Stack-YAML einfügen, ggf. Registry-Zugang konfigurieren und deployen. Keine ENV-Zugangsdaten für PetDiary erforderlich.
+
+Offizielle Anleitung: [Dockhand – Compose stacks](https://dockhand.pro/manual/).
+
+### F. Erststart für alle Installationsmethoden
+
+Öffne `http://SERVER-IP:8080` (bei einem Reverse Proxy entsprechend die HTTPS-Adresse). Lege das lokale Administratorkonto an; Passwort mindestens 12 Zeichen. Anschließend ist die Ersteinrichtung gesperrt und es erscheint die reguläre Login-Seite. Unter Einstellungen verwaltest du dein Konto und den HA-API-Token.
+
+![Dashboard – schematische Illustration](docs/images/dashboard.svg)
+
+**Sicherheit:** Die Beispielkonfiguration veröffentlicht Port 8080 auf allen Interfaces. Der erste Besucher kann das noch nicht eingerichtete Konto beanspruchen. Initial nur in einem vertrauenswürdigen Netz starten oder auf `127.0.0.1:8080:8080` beschränken und über einen SSH-Tunnel einrichten. Danach HTTPS-Reverse-Proxy verwenden, optional `COOKIE_SECURE=1` unter environment setzen, Netzwerkzugriff einschränken. Keine ungeschützte Internetfreigabe. Die Reverse-Proxy-Weiterleitung muss den HTTP-Port 8080 erreichen.
+
+### Bestehende Installation aus der alten ENV-Version
+
+Vor dem Upgrade ein Backup anlegen. Wenn bereits Tierdaten vorhanden sind, aber noch kein lokales Administratorkonto existiert, die alten ADMIN_USER, ADMIN_PASSWORD und API_TOKEN einmalig als Umgebungsvariablen über ein temporäres Compose-Override explizit bereitstellen. Die frühere .env allein wird nicht in den Container übernommen. Danach das Override und die Zugangsdaten entfernen. Bei vorhandenen Tierdaten ohne Admin-Konto und ohne alte Zugangsdaten verweigert PetDiary den Start, um eine Übernahme zu verhindern.
+
+## Passwort vergessen?
+
+```sh
+docker exec -it petdiary python /app/reset_password.py
+```
+
+Das neue Passwort zweimal verdeckt eingeben. Alle Daten und der API-Token bleiben erhalten; alte Sitzungen werden ungültig. [Ausführliche Wiederherstellungsanleitung](docs/PASSWORD_RESET.md).
 
 ## Home Assistant
 
@@ -90,7 +197,17 @@ docker compose exec -T petdiary rm /data/backup.sqlite3
 
 Backup geschützt aufbewahren: Es enthält auch die Anmelde-Hashes und das Session-Geheimnis. Für Restore Container stoppen, Datenbank in einem separaten Test-Volume wiederherstellen, Rechte UID/GID 10001 sicherstellen und erst nach Prüfung das Produktiv-Volume ersetzen. Nie `docker compose down -v` verwenden, wenn die Daten erhalten bleiben sollen.
 
-Updates (nach Backup): `git pull && docker compose up -d --build`. Ressourcenverbrauch live mit `docker stats petdiary` messen. Keine validierten RAM-, Durchsatz- oder Stabilitätsbenchmarks vorhanden.
+Updates: Erst Backup anlegen und Volume beibehalten. Im bisherigen Projektordner einer Entwicklungsinstallation `git fetch origin && git switch v0.0.1` (wenn der Branch noch nicht lokal existiert, `git switch --track origin/v0.0.1`), dann `docker compose up -d --build`. Bei einer bestehenden Installation auf dem Release-Branch `git pull && docker compose up -d --build`. Bei einem veröffentlichten Image Versions-Tag bewusst aktualisieren, `docker compose pull && docker compose up -d`. Der Compose-Projektname bestimmt den Volume-Namen; nicht versehentlich einen zweiten Stack mit leerem Volume anlegen. Ressourcenverbrauch live mit `docker stats petdiary` messen. Keine validierten RAM-, Durchsatz- oder Stabilitätsbenchmarks vorhanden.
+
+### Fehlersuche
+
+```sh
+docker compose ps
+docker compose logs --tail=100 petdiary
+curl -fsS http://127.0.0.1:8080/healthz
+```
+
+Bei Portkonflikten nur die linke Portnummer in der YAML ändern. Bei fehlenden Daten das tatsächlich gemountete Volume prüfen und kein neues Profil anlegen, bis die korrekte Datenbank wieder eingebunden ist. Bei leerer Oberfläche Browser-Cache aktualisieren. Der Healthcheck überprüft Erreichbarkeit und Datenbankzugriff, nicht sämtliche Anwendungsfunktionen.
 
 ## Entwicklung
 
@@ -102,6 +219,10 @@ python -m unittest discover -s tests -v
 ```
 
 Die Tests nutzen eine temporäre Datenbank. Sie decken Grundfunktionen ab, ersetzen keine Lasttests, visuelle Browser-Tests oder Sicherheitsprüfung.
+
+## Veröffentlichung (Maintainer)
+
+Siehe [Release-Anleitung](docs/RELEASE.md) für Tests, GitHub-Tag/Prerelease und manuelle Multiarch-Registry-Veröffentlichung. Der Repository-Branch v0.0.1 ist kein Git-Tag und kein veröffentlichtes Registry-Image.
 
 ## Referenzen
 
