@@ -9,3 +9,15 @@ h1,h2,h3,p{overflow-wrap:anywhere}h1{font-size:32px;line-height:1.2;letter-spaci
 .auth-layout{max-width:560px;margin:32px auto}.auth-card button{width:100%;margin-top:20px}.auth-card h2{margin-bottom:18px}.auth-layout .hero{margin-bottom:18px}.auth-layout .hero h1{font-size:clamp(28px,5vw,38px)}@media(max-width:600px){.top-inner{flex-wrap:wrap}.top nav{flex-wrap:wrap;gap:12px}.auth-layout{margin:16px auto}}
 
 [hidden]{display:none!important}.avatar{overflow:hidden}.avatar img{width:100%;height:100%;object-fit:cover}.inline-check{display:flex;align-items:center;gap:8px}.inline-check input{width:auto}.med-calendar{margin-top:24px}.med-calendar .section-title{margin-top:0}.calendar-filter{display:flex;align-items:flex-end;gap:10px}.calendar-filter label{margin:0;min-width:min(200px,65%)}.calendar-filter button{margin-bottom:2px}.calendar-nav{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:18px 0 12px}.calendar-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}.calendar-day{background:#f6f9f6;border:1px solid var(--line);border-radius:12px;padding:8px;min-width:0}.calendar-day h3{font-size:13px;margin:0 0 8px}.calendar-day.is-today{border:2px solid var(--green);background:#edf8f1}.dose-card{display:grid;gap:3px;padding:7px;margin-bottom:6px;background:white;border:1px solid var(--line);border-radius:8px;font-size:12px;overflow-wrap:anywhere}.dose-card button{font-size:11px;padding:6px;min-height:32px;width:100%;white-space:normal}.dose-card.dose-done{opacity:.68;background:#e6f5ea}.dose-card.dose-done>a{text-decoration:line-through}@media(max-width:800px){.calendar-grid{grid-template-columns:1fr}.calendar-day{padding:12px}.dose-card{font-size:14px}.dose-card button{width:auto;font-size:12px}}
+
+/* Local search menus: same light mint palette on every browser. */
+.combo{position:relative;min-width:0;display:block;width:100%;cursor:text}
+.combo>input{width:100%;padding-right:42px;background:#fff;border:1px solid #b9d7ce;color:#183D37}
+.combo>input[aria-expanded=true]{border-color:#087D66;box-shadow:0 0 0 3px rgba(8,125,102,.10)}
+.combo .combo-toggle{position:absolute;right:4px;top:4px;bottom:4px;min-height:0;width:34px;display:grid;place-items:center;padding:0;background:#e3f4ee;color:#087D66;font-size:22px;border:0;border-radius:8px}
+.combo-menu{position:absolute;top:calc(100% + 5px);left:0;right:0;z-index:100;max-height:260px;overflow:auto;overscroll-behavior:contain;padding:5px;background:#fff;color:#183D37;border:1px solid #b9d7ce;border-radius:12px;box-shadow:0 12px 30px rgba(24,61,55,.15);font-size:14px;font-weight:500;text-align:left}
+.combo-option{padding:10px 12px;border-radius:8px;cursor:pointer;overflow-wrap:anywhere;line-height:1.4}
+.combo-option:hover,.combo-option[aria-selected=true]{background:#D9F4E5;color:#07654f}
+.combo-info{padding:10px 12px;font-size:12px;color:#627e74}
+#med-reminder{padding:12px 16px;border:1px solid #d4e6de;border-radius:12px;margin:16px 0;background:#f6f9f6}
+#med-reminder summary{cursor:pointer;font-weight:600;color:#087D66}
