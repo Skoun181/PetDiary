@@ -460,3 +460,5 @@ PRODUCTS += [
   "Metacam 1,5 mg/ml – Suspension zum Eingeben für Hunde",
   "Metacam 0,5 mg/ml – Suspension zum Eingeben für Hunde"
 ]
+
+PRODUCTS += ["Milbemax 12,5 mg/125 mg – Tabletten für Hunde", "Milbemax 12,5 mg/125 mg – Kautabletten für Hunde"]
