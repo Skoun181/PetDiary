@@ -5,7 +5,7 @@
 
 Private, ressourcenschonende Tiergesundheitsakte für den eigenen Docker-Server. Keine Cloud, kein JavaScript-Framework, keine zusätzliche Datenbank. Deutschsprachige Weboberfläche in Mintgrün und Petrol, inspiriert von modernen Tiergesundheits-Apps.
 
-**Status:** Vorabversion 0.0.2 im Quellcode; Docker-Build, Integrationstests und Registry-Image noch zu verifizieren. Ein lokales Administratorkonto pro Installation; keine Mehrbenutzerverwaltung.
+**Status:** Version 0.0.2. Die automatisierten Integrationstests und der Docker-Hub-Build für den Medikamenten-Bugfix waren erfolgreich. Ein lokales Administratorkonto pro Installation; keine Mehrbenutzerverwaltung.
 
 [📖 Bebilderte Bedienungsanleitung](docs/USER_GUIDE.md) · [🔑 Passwort zurücksetzen](docs/PASSWORD_RESET.md) · [Änderungen](CHANGELOG.md)
 
@@ -51,7 +51,7 @@ Mit GitHub CLI, auch bei Anmeldung über Google:
 
 ```sh
 gh auth login
-gh repo clone Skoun181/PetDiary -- --branch release/0.0.1
+gh repo clone Skoun181/PetDiary -- --branch stable
 cd PetDiary
 docker compose up -d --build
 ```
@@ -59,16 +59,16 @@ docker compose up -d --build
 Alternativ mit eingerichtetem Git-Zugriff:
 
 ```sh
-git clone --branch release/0.0.1 https://github.com/Skoun181/PetDiary.git
+git clone --branch stable https://github.com/Skoun181/PetDiary.git
 cd PetDiary
 docker compose up -d --build
 ```
 
 Die mitgelieferte [compose.yaml](compose.yaml) baut das Image lokal. Sie verwendet einen benannten Docker-Datenträger unter /data. Für bestehende Entwicklungsinstallationen den bisherigen Projektordner und das bisherige Volume beibehalten; siehe Updates unten.
 
-### B. Nur Docker Compose YAML (nach Registry-Veröffentlichung)
+### B. Nur Docker Compose YAML (Docker Hub)
 
-**Status:** Das folgende Registry-Image ist eine vorbereitete Zieladresse, noch nicht veröffentlicht oder verifiziert. Bis dahin Methode A verwenden. Falls der Maintainer das Paket privat veröffentlicht, zuerst mit berechtigtem Docker-Hub-Token am Registry-Host anmelden; bei einem bewusst öffentlich freigegebenen Paket entfällt dies.
+**Docker Hub:** Das Image wird automatisch gebaut. Aktuelle Tags: [Docker Hub](https://hub.docker.com/r/skoun181/petdiary/tags). Bei einem privaten Paket benötigst du einen Docker-Hub-Token mit Leserechten.
 
 Erstelle eine Datei `docker-compose.yaml` mit dem Inhalt der [Stack-Vorlage](deploy/compose.yaml):
 
@@ -98,7 +98,7 @@ volumes:
 docker compose up -d
 ```
 
-### C. Docker Pull / Docker Run (nach Registry-Veröffentlichung)
+### C. Docker Pull / Docker Run (Docker Hub)
 
 ```sh
 docker pull skoun181/petdiary:latest
@@ -120,9 +120,9 @@ Das Pull-Kommando lädt nur das Image, startet aber keinen Container. Verwende d
 3. Stackname `petdiary` eingeben. Inhalt der [Stack-Vorlage](deploy/compose.yaml) einfügen und die Image-Zeile auf `image: petdiary:local` ändern. Kein erzwungenes erneutes Pull aktivieren.
 4. **Deploy the stack**. Im Browser Port 8080 aufrufen.
 
-**Nach Registry-Veröffentlichung:** Schritte 2–4 mit unveränderter Stack-Vorlage; vorher ggf. die private Docker-Hub-Registry in Portainer konfigurieren.
+**Docker-Hub-Installation:** Schritte 2–4 mit unveränderter Stack-Vorlage; vorher ggf. die private Docker-Hub-Registry in Portainer konfigurieren.
 
-Optional kann ein Git-Stack mit der Repository-URL, Referenz `refs/heads/release/0.0.1`, privaten Git-Zugangsdaten und Compose-Pfad `compose.yaml` eingerichtet werden, sofern die jeweilige Portainer-Installation Builds aus Git-Kontext unterstützt. Der lokal gebaute Image-Stack ist die Alternative.
+Optional kann ein Git-Stack mit der Repository-URL, Referenz `refs/heads/stable`, privaten Git-Zugangsdaten und Compose-Pfad `compose.yaml` eingerichtet werden, sofern die jeweilige Portainer-Installation Builds aus Git-Kontext unterstützt. Der lokal gebaute Image-Stack ist die Alternative.
 
 Offizielle Anleitung: [Portainer – Add a new stack](https://docs.portainer.io/user/docker/stacks/add).
 
@@ -132,12 +132,12 @@ Offizielle Anleitung: [Portainer – Add a new stack](https://docs.portainer.io/
 
 1. In Dockhand unter **Settings → Git** bei einem privaten Fork die Git-Zugangsdaten hinterlegen.
 2. Unter **Stacks** einen Git-Stack mit der URL `https://github.com/Skoun181/PetDiary.git` erstellen.
-3. Branch `release/0.0.1`, Compose-Datei `compose.yaml`, Kontextverzeichnis Repository-Wurzel einstellen.
+3. Branch `stable`, Compose-Datei `compose.yaml`, Kontextverzeichnis Repository-Wurzel einstellen.
 4. **Build images on deploy** aktivieren (notwendig für build: .) und deployen. Beim Einsatz eines Remote-Agenten Build-Unterstützung prüfen.
 
 Alternativ Methode A nur bis zum lokalen Build ausführen und einen manuellen Stack mit der Stack-Vorlage und `image: petdiary:local` anlegen.
 
-**Nach Registry-Veröffentlichung:** Unter Stacks **Create stack**, Name `petdiary`, unveränderte Stack-YAML einfügen, ggf. Registry-Zugang konfigurieren und deployen. Keine ENV-Zugangsdaten für PetDiary erforderlich.
+**Docker-Hub-Installation:** Unter Stacks **Create stack**, Name `petdiary`, unveränderte Stack-YAML einfügen, ggf. Registry-Zugang konfigurieren und deployen. Keine ENV-Zugangsdaten für PetDiary erforderlich.
 
 Offizielle Anleitung: [Dockhand – Compose stacks](https://dockhand.pro/manual/).
 
@@ -197,7 +197,7 @@ docker compose exec -T petdiary rm /data/backup.sqlite3
 
 Backup geschützt aufbewahren: Es enthält auch die Anmelde-Hashes und das Session-Geheimnis. Für Restore Container stoppen, Datenbank in einem separaten Test-Volume wiederherstellen, Rechte UID/GID 10001 sicherstellen und erst nach Prüfung das Produktiv-Volume ersetzen. Nie `docker compose down -v` verwenden, wenn die Daten erhalten bleiben sollen.
 
-Updates: Erst Backup anlegen und Volume beibehalten. Im bisherigen Projektordner einer Entwicklungsinstallation `git fetch origin && git switch release/0.0.1` (wenn der Branch noch nicht lokal existiert, `git switch --track origin/release/0.0.1`), dann `docker compose up -d --build`. Bei einer bestehenden Installation auf dem Release-Branch `git pull && docker compose up -d --build`. Bei einem veröffentlichten Image Versions-Tag bewusst aktualisieren, `docker compose pull && docker compose up -d`. Der Compose-Projektname bestimmt den Volume-Namen; nicht versehentlich einen zweiten Stack mit leerem Volume anlegen. Ressourcenverbrauch live mit `docker stats petdiary` messen. Keine validierten RAM-, Durchsatz- oder Stabilitätsbenchmarks vorhanden.
+Updates: Erst Backup anlegen und Volume beibehalten. Im bisherigen Projektordner einer Entwicklungsinstallation `git fetch origin && git switch stable` (wenn der Branch noch nicht lokal existiert, `git switch --track origin/stable`), dann `docker compose up -d --build`. Bei einer bestehenden Installation auf dem Release-Branch `git pull && docker compose up -d --build`. Bei einem veröffentlichten Image Versions-Tag bewusst aktualisieren, `docker compose pull && docker compose up -d`. Der Compose-Projektname bestimmt den Volume-Namen; nicht versehentlich einen zweiten Stack mit leerem Volume anlegen. Ressourcenverbrauch live mit `docker stats petdiary` messen. Keine validierten RAM-, Durchsatz- oder Stabilitätsbenchmarks vorhanden.
 
 ### Fehlersuche
 
@@ -222,7 +222,7 @@ Die Tests nutzen eine temporäre Datenbank. Sie decken Grundfunktionen ab, erset
 
 ## Veröffentlichung (Maintainer)
 
-Siehe [Release-Anleitung](docs/RELEASE.md) für Tests, GitHub-Tag/Prerelease und manuelle Multiarch-Registry-Veröffentlichung. Der Repository-Branch release/0.0.1 ist kein Git-Tag und kein veröffentlichtes Registry-Image.
+Dauerhafte Branches: `stable` für die veröffentlichte Version, `develop` für Entwicklung. Neue Versionen erhalten einen Git-Tag `vX.Y.Z`, ein GitHub Release und passende Docker-Hub-Tags. Siehe [Release-Anleitung](docs/RELEASE.md).
 
 ## Referenzen
 
