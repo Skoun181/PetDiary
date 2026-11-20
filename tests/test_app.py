@@ -337,6 +337,10 @@ class PetDiaryTest(unittest.TestCase):
             newpass="different-admin-pass123"
             self.assertEqual(other.post("/setup",data={"csrf":csrftoken,"username":"different",
                 "password":newpass,"confirm_password":newpass}).status_code,303)
+            # Creating the session rotates the CSRF secret.
+            other.get("/settings")
+            with other.session_transaction() as sess:
+                csrftoken=sess["csrf"]
             response=other.post("/settings",data={"csrf":csrftoken,"action":"generate",
                      "current_password":newpass})
             import re
