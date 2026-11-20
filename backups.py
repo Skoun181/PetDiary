@@ -25,6 +25,8 @@ SCHEMA_VERSION = 1
 MAX_ARCHIVE_BYTES = 256 * 1024 * 1024
 MAX_DATABASE_BYTES = 1024 * 1024 * 1024
 MAX_MANIFEST_BYTES = 32768
+MAX_COMPRESSION_RATIO = 250
+MAX_SAFETY_BACKUPS = 5
 BACKUP_TABLES = ("pets", "records", "pet_photos", "attachments", "products", "dose_checks")
 DELETE_ORDER = ("dose_checks", "attachments", "pet_photos", "records", "pets", "products")
 BACKUP_MEMBERS = {"manifest.json", "petdiary.sqlite3"}
@@ -86,6 +88,8 @@ def _verify_tables(source, destination):
               "attachments_record", "records_parent"}
     if any(kind not in ("table", "index") or name not in accepted for kind, name in entries):
         raise BackupError("Die Sicherung enthält unerwartete Datenbankobjekte.")
+    if source.execute("PRAGMA user_version").fetchone()[0] != SCHEMA_VERSION:
+        raise BackupError("Die SQLite-Schema-Version ist nicht kompatibel.")
     for table in BACKUP_TABLES:
         incoming = {row[1] for row in source.execute("PRAGMA table_info(" + table + ")")}
         installed = {row[1] for row in destination.execute("PRAGMA table_info(" + table + ")")}
@@ -201,6 +205,8 @@ def _inspect_archive(archive, dest):
                 maximum = MAX_MANIFEST_BYTES if info.filename == "manifest.json" else MAX_DATABASE_BYTES
                 if info.file_size > maximum:
                     raise BackupError("Die entpackten Dateien überschreiten die Größenbegrenzung.")
+                if info.file_size > 2*CHUNK and info.file_size > max(1,info.compress_size)*MAX_COMPRESSION_RATIO:
+                    raise BackupError("Das ZIP ist ungewöhnlich stark komprimiert und wird abgelehnt.")
             raw = zipped.read("manifest.json")
             if len(raw) > MAX_MANIFEST_BYTES:
                 raise BackupError("Die ZIP-Metadaten sind zu groß.")
@@ -245,6 +251,11 @@ def _safety_backup(database, data_dir):
         _snapshot(database, target)
         with sqlite3.connect(target) as connection:
             _check_db(connection)
+        # Keep recent local recovery points without filling the persistent volume indefinitely.
+        old = sorted((p for p in directory.glob("pre-import-*.sqlite3")
+                      if p.is_file() and not p.is_symlink()), key=lambda p:p.stat().st_mtime)
+        for previous in old[:-MAX_SAFETY_BACKUPS]:
+            previous.unlink()
         LOG.info("Internal pre-import safety backup created")
         return target
     except Exception:
