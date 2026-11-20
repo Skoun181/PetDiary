@@ -126,6 +126,7 @@ def create_portable_backup(database, data_dir, app_version):
         _snapshot(database, snapshot)
         with _connect(snapshot) as con:
             _check_db(con)
+            con.execute("PRAGMA secure_delete=ON")
             con.execute("DELETE FROM admin_account")
             con.execute("DELETE FROM app_settings")
             con.execute("PRAGMA user_version=" + str(SCHEMA_VERSION))
@@ -134,6 +135,8 @@ def create_portable_backup(database, data_dir, app_version):
         with sqlite3.connect(snapshot) as con:
             con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
             con.execute("PRAGMA journal_mode=DELETE")
+            # Purge freed pages containing historic credential hashes/keys from the snapshot.
+            con.execute("VACUUM")
             _check_db(con)
         if snapshot.stat().st_size > MAX_DATABASE_BYTES:
             raise BackupError("Die Datenbank überschreitet das maximale Exportvolumen (1 GiB).")
@@ -214,7 +217,9 @@ def _inspect_archive(archive, dest):
                     digest.update(block)
             if digest.hexdigest() != manifest["database_sha256"]:
                 raise BackupError("Die ZIP-Prüfsumme stimmt nicht überein.")
-            if total < 100 or dest.open("rb").read(16) != b"SQLite format 3\x00":
+            with dest.open("rb") as db_file:
+                is_sqlite = db_file.read(16) == b"SQLite format 3\x00"
+            if total < 100 or not is_sqlite:
                 raise BackupError("Die Sicherung enthält keine gültige SQLite-Datei.")
             return manifest
     except (OSError, zipfile.BadZipFile, zipfile.LargeZipFile, RuntimeError) as error:
@@ -243,27 +248,32 @@ def _safety_backup(database, data_dir):
 
 
 def _replace_data(source, database, default_products):
-    with _connect(database) as destination:
-        destination.execute("BEGIN IMMEDIATE")
-        for table in DELETE_ORDER:
-            destination.execute("DELETE FROM " + table)
-        # Keep IDs and relationships for linked records, photos, attachments and doses.
-        for table in BACKUP_TABLES:
-            columns = [row[1] for row in source.execute("PRAGMA table_info(" + table + ")")]
-            names = ",".join('"' + c + '"' for c in columns)
-            marks = ",".join("?" for _ in columns)
-            cursor = source.execute("SELECT " + names + " FROM " + table)
-            while True:
-                rows = cursor.fetchmany(128)
-                if not rows:
-                    break
-                destination.executemany("INSERT INTO " + table + " (" + names + ") VALUES (" + marks + ")", rows)
-        destination.executemany("INSERT OR IGNORE INTO products(name) VALUES (?)", ((p,) for p in default_products))
-        if destination.execute("PRAGMA foreign_key_check").fetchone():
-            raise BackupError("Der Import hat ungültige Referenzen. Die Änderungen wurden zurückgerollt.")
-        if destination.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
-            raise BackupError("Die Datenbankprüfung schlug fehl. Die Änderungen wurden zurückgerollt.")
-        return _counts(destination)
+    destination = _connect(database)
+    try:
+        with destination:
+            destination.execute("BEGIN IMMEDIATE")
+            destination.execute("PRAGMA defer_foreign_keys=ON")
+            for table in DELETE_ORDER:
+                destination.execute("DELETE FROM " + table)
+            # Keep IDs and relationships for linked records, photos, attachments and doses.
+            for table in BACKUP_TABLES:
+                columns = [row[1] for row in source.execute("PRAGMA table_info(" + table + ")")]
+                names = ",".join('"' + c + '"' for c in columns)
+                marks = ",".join("?" for _ in columns)
+                cursor = source.execute("SELECT " + names + " FROM " + table)
+                while True:
+                    rows = cursor.fetchmany(128)
+                    if not rows:
+                        break
+                    destination.executemany("INSERT INTO " + table + " (" + names + ") VALUES (" + marks + ")", rows)
+            destination.executemany("INSERT OR IGNORE INTO products(name) VALUES (?)", ((p,) for p in default_products))
+            if destination.execute("PRAGMA foreign_key_check").fetchone():
+                raise BackupError("Der Import hat ungültige Referenzen. Die Änderungen wurden zurückgerollt.")
+            if destination.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+                raise BackupError("Die Datenbankprüfung schlug fehl. Die Änderungen wurden zurückgerollt.")
+            return _counts(destination)
+    finally:
+        destination.close()
 
 
 def restore_portable_backup(file, database, data_dir, default_products):
