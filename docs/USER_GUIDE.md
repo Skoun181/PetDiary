@@ -1,4 +1,4 @@
-# PetDiary 0.0.3 – Bedienungsanleitung
+# PetDiary 0.0.4 – Bedienungsanleitung
 
 [Zurück zur README](../README.md) · [Passwort zurücksetzen](PASSWORD_RESET.md)
 
@@ -18,7 +18,7 @@ Keine Standard-Zugangsdaten, keine Pflicht-.env und keine Cloud-Anmeldung. Der e
 
 ![Illustration der Übersicht und des Kalenders](images/dashboard.svg)
 
-Das Dashboard zeigt die Tierprofile, den wöchentlichen Medikamentenkalender und offene Fälligkeiten der nächsten 30 Tage einschließlich überfälliger Einträge.
+Das Dashboard zeigt die Tierprofile, den wöchentlichen Medikamentenkalender und offene Fälligkeiten der nächsten 365 Tage einschließlich überfälliger Einträge.
 
 Wähle **+ Tier hinzufügen** und erfasse:
 
@@ -103,7 +103,7 @@ Der lokale Präparatekatalog ist ein Startkatalog und keine vollständige behör
 
 ## 6. Erinnerungen
 
-Die Übersicht zeigt offene Fälligkeiten der kommenden 30 Tage und Überfälliges. Unter **Erinnerungen** findest du alle offenen datumsbasierten Fälligkeiten. Markiere eine Erinnerung als erledigt; der Akteneintrag bleibt erhalten. Du kannst sie beim Bearbeiten wieder öffnen. Zukünftige Termine erhalten standardmäßig den Termintag als Fälligkeit.
+Die Übersicht zeigt offene Fälligkeiten der kommenden 365 Tage und Überfälliges. Unter **Erinnerungen** findest du alle offenen datumsbasierten Fälligkeiten. Markiere eine Erinnerung als erledigt; der Akteneintrag bleibt erhalten. Du kannst sie beim Bearbeiten wieder öffnen. Zukünftige Termine erhalten standardmäßig den Termintag als Fälligkeit.
 
 Medikamentengaben besitzen einen eigenen Status pro Uhrzeit und Datum im Kalender. Sie laufen getrennt von den datumsbasierten Erinnerungen.
 
@@ -115,7 +115,7 @@ Medikamentengaben besitzen einen eigenen Status pro Uhrzeit und Datum im Kalende
 4. In `secrets.yaml` die tatsächlichen Adressen mit erreichbarer HTTPS- oder LAN-Adresse und den Bearer-Header eintragen:
 
 ```yaml
-petdiary_url: "https://PETDIARY-HOST/api/v1/reminders?days=30"
+petdiary_url: "https://PETDIARY-HOST/api/v1/reminders?days=365"
 petdiary_medication_url: "https://PETDIARY-HOST/api/v1/medications?days=1"
 petdiary_authorization: "Bearer DEIN_TOKEN"
 ```
@@ -123,7 +123,7 @@ petdiary_authorization: "Bearer DEIN_TOKEN"
 5. HA-Konfiguration prüfen und neu laden bzw. neu starten. Über **Entwicklerwerkzeuge → Zustände** die tatsächlich erzeugten Entity-IDs überprüfen.
 6. Die [Dashboard-Karte](../examples/home-assistant-card.yaml) als manuelle Markdown-Karte hinzufügen und Entity-IDs ggf. ändern.
 
-Die API ist lesend. Datumsfälligkeiten sind in der Zeitzone des Servers, standardmäßig Europe/Berlin; Medikamentenzeiten enthalten einen Offset; ohne Uhrzeit liefert die API time als leeren String, scheduled_at als null und entry_id als zugehörigen Akteneintrag. Die Medikamenten-API liefert nur das gewählte Zeitfenster. Eine HA-Benachrichtigungsautomation muss separat angelegt werden. PetDiary verschickt keine eigenen Push-Nachrichten. Verlass dich bei medizinisch kritischen Gaben nicht auf eine einzige Polling-Automation.
+Die Erinnerungs-API verwendet ohne days-Parameter 365 Tage. Bei bestehender Home-Assistant-Konfiguration days=30 in secrets.yaml durch days=365 ersetzen und Home Assistant neu starten. Die API ist lesend. Datumsfälligkeiten sind in der Zeitzone des Servers, standardmäßig Europe/Berlin; Medikamentenzeiten enthalten einen Offset; ohne Uhrzeit liefert die API time als leeren String, scheduled_at als null und entry_id als zugehörigen Akteneintrag. Die Medikamenten-API liefert nur das gewählte Zeitfenster. Eine HA-Benachrichtigungsautomation muss separat angelegt werden. PetDiary verschickt keine eigenen Push-Nachrichten. Verlass dich bei medizinisch kritischen Gaben nicht auf eine einzige Polling-Automation.
 
 ## 8. Einstellungen und Wartung
 
