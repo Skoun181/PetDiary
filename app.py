@@ -256,7 +256,18 @@ def create_app(config=None):
             return backup_error("Aktuelles Passwort ist falsch.",403)
         try:
             temporary, archive, counts=create_portable_backup(path,folder,Path(__file__).with_name("VERSION").read_text().strip())
-            response=send_file(archive,as_attachment=True,download_name=archive.name,mimetype="application/zip")
+            # Stream from disk so large ZIPs do not need to be buffered by Flask.
+            # The finally clause also removes the temporary files on client disconnect.
+            def chunks():
+                try:
+                    with archive.open("rb") as stream:
+                        for block in iter(lambda: stream.read(1024*1024), b""):
+                            yield block
+                finally:
+                    temporary.cleanup()
+            response=app.response_class(chunks(),mimetype="application/zip")
+            response.headers["Content-Disposition"]='attachment; filename="'+archive.name+'"'
+            response.headers["Content-Length"]=str(archive.stat().st_size)
             response.call_on_close(temporary.cleanup)
             return response
         except BackupError as error:
