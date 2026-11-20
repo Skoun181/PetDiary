@@ -206,3 +206,58 @@ if(extraRoot){
   });
   addState();
 }
+
+/* Portable backup controls: fetch permits an accurate completion/error state. */
+document.querySelectorAll("form[data-backup]").forEach(form=>{
+  const status=document.getElementById("backup-result");
+  const button=form.querySelector('button[type="submit"]');
+  const caption=button?.querySelector("[data-backup-label]");
+  const original=caption?.textContent||"";
+  form.addEventListener("submit",async event=>{
+    event.preventDefault();
+    if(!form.reportValidity()||!button)return;
+    const exporting=form.dataset.backup==="export";
+    button.disabled=true;
+    button.setAttribute("aria-busy","true");
+    caption.textContent=exporting?"ZIP wird erstellt …":"Backup wird geprüft und importiert …";
+    status.hidden=false;
+    status.className="backup-result";
+    status.textContent=exporting?"Die Sicherung wird vorbereitet.":"Die Datei wird geprüft. Vorhandene Daten bleiben bei Fehlern erhalten.";
+    try{
+      const response=await fetch(form.action,{
+        method:"POST",body:new FormData(form),credentials:"same-origin",
+        headers:{"Accept":"application/json"},cache:"no-store"
+      });
+      if(!response.ok){
+        const data=await response.json().catch(()=>null);
+        throw new Error(data?.error||"Serverfehler (HTTP "+response.status+").");
+      }
+      if(exporting){
+        const filename=/filename\*?=(?:UTF-8''|")?([^";]+)/i.exec(response.headers.get("Content-Disposition")||"")?.[1]||
+            "petdiary-backup.zip";
+        const blob=await response.blob();
+        const url=URL.createObjectURL(blob);
+        const download=document.createElement("a");
+        download.href=url;download.download=decodeURIComponent(filename.replace(/^"|"$/g,""));
+        document.body.append(download);download.click();download.remove();
+        window.setTimeout(()=>URL.revokeObjectURL(url),60000);
+        status.textContent="✅ Sicherung erfolgreich erstellt und der Download gestartet. Bitte Datei sicher aufbewahren.";
+      } else {
+        const data=await response.json();
+        const info=data.imported||{};
+        status.textContent="✅ Import erfolgreich: "+info.pets+" Tiere, "+info.records+" Akteneinträge, "+
+          info.attachments+" Anhänge und "+info.pet_photos+" Profilbilder. Interne Sicherheitskopie: "+
+          data.safety_backup+". Die neue Akte ist sofort verfügbar.";
+        form.reset();
+      }
+      status.classList.add("backup-success");
+    }catch(error){
+      status.classList.add("backup-error");
+      status.textContent="❌ "+(error?.message||"Unbekannter Fehler");
+    }finally{
+      caption.textContent=original;
+      button.disabled=false;
+      button.removeAttribute("aria-busy");
+    }
+  });
+});
