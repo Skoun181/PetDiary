@@ -2,6 +2,8 @@
 
 ## 0.0.2 – Medikamentengaben
 
+- Veröffentlichungen über dauerhafte Branches stable und develop mit automatisierten GitHub Releases und Docker Hub Tags.
+
 - Bereits verabreichte Medikamente ohne Uhrzeit oder Kurdauer dokumentieren.
 - Mehrere Medikamente pro Termin, Untersuchung oder Medikamenteneintrag; jeder zusätzliche Block hat eigene Angaben und optionalen Plan.
 - Zeitlose Pläne erzeugen eine Gabe pro Tag ohne feste Uhrzeit; API liefert scheduled_at: null und time: leer.
