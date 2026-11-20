@@ -31,7 +31,7 @@ function enhance(input,source,strict=false){
   }
   function options(){
     return strict?Array.from(source.options).filter(o=>!o.disabled).map(o=>({label:o.textContent.trim(),value:o.value})):
-      Array.from(source.options,o=>({label:o.value,value:o.value}));
+      Array.from(source.options,o=>({label:o.value,value:o.value,hint:o.dataset.hint||""}));
   }
   function draw(all=false){
     closeOthers(control);
@@ -45,6 +45,7 @@ function enhance(input,source,strict=false){
       const option=document.createElement("div");option.className="combo-option";option.id=menu.id+"-"+i;
       option.setAttribute("role","option");option.setAttribute("aria-selected","false");
       option.textContent=item.custom?"＋ Eigene Eingabe: "+item.label:item.label;
+      if(item.hint){const hint=document.createElement("small");hint.className="combo-source-hint";hint.textContent=item.hint;option.append(hint);}
       option.addEventListener("pointerdown",e=>e.preventDefault());
       option.addEventListener("click",()=>choose(item));menu.append(option);
     }
