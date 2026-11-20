@@ -25,6 +25,7 @@ Unter [Actions](https://github.com/Skoun181/PetDiary/actions) den fehlgeschlagen
 
 [Releases](https://github.com/Skoun181/PetDiary/releases) · [Docker Hub](https://hub.docker.com/r/skoun181/petdiary/tags)
 
-## Aktueller Entwicklungsstand
+## Version 0.0.5
 
-Die Funktionen für portable ZIP-Backups und den Import sind für die geplante Version 0.0.5 auf `develop` implementiert. Vor einem Merge nach `stable` Integrations- und Sicherheitschecks sowie einen Live-Umzug mit Testdaten im separaten `petdiary-develop-data`-Volume verifizieren. `latest` und `stable` auf Docker Hub bleiben unberührt, bis ein Release ausdrücklich freigegeben und gemergt wird. Bei Veröffentlichung muss `VERSION` strikt höher als `0.0.4` sein.
+Die ZIP-Export-/Importfunktion wurde nach erfolgreichen Integrationstests und Docker-Smoke-Test aus `develop` über einen Pull Request nach `stable` übernommen. Der Release-Workflow erstellt die GitHub-Version `v0.0.5` und Docker-Hub-Tags `0.0.5`, `latest` und `stable`. Ein Umzug vorhandener produktiver Instanzen ist ausschließlich nach einer separaten Sicherung und Erhalt des bisherigen Volumes zu empfehlen. Für ältere 0.0.4-Installationen steht der einmalige Offline-Konverter in [BACKUP_MIGRATION.md](BACKUP_MIGRATION.md) bereit.
+
