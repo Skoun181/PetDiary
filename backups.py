@@ -124,13 +124,17 @@ def create_portable_backup(database, data_dir, app_version):
         folder = Path(temporary.name)
         snapshot = folder / "petdiary.sqlite3"
         _snapshot(database, snapshot)
-        with _connect(snapshot) as con:
-            _check_db(con)
-            con.execute("PRAGMA secure_delete=ON")
-            con.execute("DELETE FROM admin_account")
-            con.execute("DELETE FROM app_settings")
-            con.execute("PRAGMA user_version=" + str(SCHEMA_VERSION))
-            counts = _counts(con)
+        sanitizing = _connect(snapshot)
+        try:
+            with sanitizing:
+                _check_db(sanitizing)
+                sanitizing.execute("PRAGMA secure_delete=ON")
+                sanitizing.execute("DELETE FROM admin_account")
+                sanitizing.execute("DELETE FROM app_settings")
+                sanitizing.execute("PRAGMA user_version=" + str(SCHEMA_VERSION))
+                counts = _counts(sanitizing)
+        finally:
+            sanitizing.close()
         # A copy of a WAL-mode database must not depend on an external -wal file.
         with sqlite3.connect(snapshot) as con:
             con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
@@ -229,6 +233,8 @@ def _inspect_archive(archive, dest):
 
 def _safety_backup(database, data_dir):
     directory = Path(data_dir) / SAFETY_FOLDER
+    if directory.is_symlink():
+        raise BackupError("Unsicheres Sicherungsverzeichnis.")
     directory.mkdir(mode=0o700, exist_ok=True)
     if directory.is_symlink():
         raise BackupError("Unsicheres Sicherungsverzeichnis.")
@@ -291,9 +297,13 @@ def restore_portable_backup(file, database, data_dir, default_products):
         _save_upload(file, archive)
         incoming = folder / "petdiary.sqlite3"
         manifest = _inspect_archive(archive, incoming)
-        with _connect(incoming, readonly=True) as source:
-            with _connect(database) as current:
+        source = _connect(incoming, readonly=True)
+        try:
+            current = _connect(database)
+            try:
                 _verify_tables(source, current)
+            finally:
+                current.close()
             _check_db(source)
             actual = _counts(source)
             if actual != manifest["counts"]:
@@ -305,6 +315,8 @@ def restore_portable_backup(file, database, data_dir, default_products):
             except Exception:
                 LOG.exception("Data import rolled back; internal safety backup retained")
                 raise
+        finally:
+            source.close()
         LOG.info("Portable restore complete: pets=%d records=%d attachments=%d",
                  counts["pets"], counts["records"], counts["attachments"])
         return counts, safety.name
@@ -314,5 +326,27 @@ def restore_portable_backup(file, database, data_dir, default_products):
     except (sqlite3.Error, OSError, ValueError) as error:
         LOG.exception("Portable data import failed")
         raise BackupError("Der Import ist fehlgeschlagen. Die bestehenden Daten wurden nicht geändert; bitte die Serverlogs prüfen.") from error
+    finally:
+        temporary.cleanup()
+
+if __name__ == "__main__":
+    # Offline converter for installations older than the browser export feature.
+    # No Flask, live credentials or Docker Hub access required.
+    import argparse
+    parser=argparse.ArgumentParser(description="Create a credential-free PetDiary ZIP from an existing SQLite snapshot.")
+    parser.add_argument("export", choices=["export"])
+    parser.add_argument("--database", required=True, type=Path, help="Existing SQLite database or offline snapshot")
+    parser.add_argument("--output-dir", required=True, type=Path, help="Directory for the ZIP file")
+    parser.add_argument("--app-version", default="0.0.4", help="Version of the source application")
+    arguments=parser.parse_args()
+    if not arguments.database.is_file():
+        parser.error("The input database does not exist.")
+    arguments.output_dir.mkdir(parents=True, exist_ok=True)
+    temporary, archive, counts=create_portable_backup(arguments.database, arguments.output_dir, arguments.app_version)
+    try:
+        final=arguments.output_dir / archive.name
+        shutil.copy2(archive, final)
+        final.chmod(0o600)
+        print("Exported "+str(final)+" (pets="+str(counts["pets"])+", records="+str(counts["records"])+")")
     finally:
         temporary.cleanup()
