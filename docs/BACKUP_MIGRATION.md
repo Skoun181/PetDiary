@@ -166,7 +166,7 @@ docker run --rm --user 10001:10001 -v petdiary-develop-data:/data python:3.12-sl
 docker start petdiary-develop
 ```
 
-Danach `/healthz`, Anmeldung und alle Tierakten prüfen. Sicherheitskopien nicht unkontrolliert ansammeln lassen, weil sie sensible Daten enthalten; erst nach erfolgreich geprüftem Import und zusätzlicher externer Sicherung löschen.
+Danach `/healthz`, Anmeldung und alle Tierakten prüfen. PetDiary bewahrt automatisch maximal fünf solcher internen Sicherheitskopien auf. Sie enthalten sensible Daten; nach erfolgreich geprüftem Import und zusätzlicher externer Sicherung können nicht mehr benötigte Kopien manuell gelöscht werden.
 
 ## 9. Technische Grenzen und Sicherheit
 
