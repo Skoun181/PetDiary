@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.0.5 – Entwicklung (nur develop, noch kein Docker-Hub-Release)
+
+- ZIP-Export über Einstellungen mit SQLite Online-Backup, Metadaten, Prüfsumme und vollständigen Bildern/PDFs.
+- Administratorpasswort-Hash, API-Token-Hash, Session-Geheimnis und Kontodaten bleiben aus portablen Exporten ausgeschlossen; nach dem Import gelten ausschließlich die Zugänge der Zielinstanz.
+- ZIP-Import mit Integritäts-, Schema-, Größen- und Pfadprüfung, automatischem internen Sicherheitsbackup und atomarem Datenersatz.
+- Separate Dockhand-Testinstallation mit eigenem Volume und Port 8081. stable bleibt unverändert.
+
+
 ## 0.0.4 – Jahresvorschau für Erinnerungen
 
 - Dashboard zeigt offene Erinnerungen der nächsten 365 Tage inklusive überfälliger Einträge.
