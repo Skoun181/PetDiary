@@ -248,5 +248,33 @@ class PetDiaryTest(unittest.TestCase):
         self.assertEqual(client.post("/login",data={"csrf":self.csrf,"username":"admin","password":self.password}).status_code,303)
         self.assertIn(b"Eigene unveraenderte Variante",client.get(pet+"/records/new?kind=med").data)
 
+    def test_reminder_horizon_365_days(self):
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        p=self.pet("Jahresvorschau")
+        today=datetime.now(ZoneInfo("Europe/Berlin")).date()
+        for offset,title in [(-1,"VergangenTest"),(180,"HalbjahrTest"),(365,"GrenzeTest"),(366,"AusserhalbTest")]:
+            due=(today+timedelta(days=offset)).isoformat()
+            self.assertEqual(self.post(p+"/records/new",kind="reminder",title=title,
+                                       day=today.isoformat(),due=due).status_code,303)
+        for suffix in ("", "?days=365"):
+            response=self.client.get("/api/v1/reminders"+suffix,headers=self.api)
+            self.assertEqual(response.status_code,200)
+            result=response.get_json()
+            self.assertEqual(result["count"],3)
+            self.assertEqual(result["overdue"],1)
+            self.assertEqual({r["title"] for r in result["reminders"]},
+                             {"VergangenTest","HalbjahrTest","GrenzeTest"})
+        short=self.client.get("/api/v1/reminders?days=30",headers=self.api).get_json()
+        self.assertEqual(short["count"],1)
+        self.assertEqual(short["reminders"][0]["title"],"VergangenTest")
+        dashboard=self.client.get("/").data
+        self.assertIn("In den nächsten 365 Tagen".encode(),dashboard)
+        self.assertIn(b"HalbjahrTest",dashboard)
+        self.assertIn(b"GrenzeTest",dashboard)
+        self.assertNotIn(b"AusserhalbTest",dashboard)
+        self.assertIn(b"AusserhalbTest",self.client.get("/reminders").data)
+        self.assertIn(b"?days=365",self.client.get("/settings").data)
+
 if __name__=="__main__":
     unittest.main()

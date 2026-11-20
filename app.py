@@ -18,6 +18,7 @@ from catalog import BREEDS, COLORS, SEX, CHIP_LOCATIONS, TATTOO_LOCATIONS, PRODU
 CATEGORIES = {"visit":"Termin", "vaccine":"Impfung", "exam":"Untersuchung", "lab":"Labor/Befund", "med":"Medikament", "worm":"Entwurmung", "weight":"Gewicht", "food":"Ernährung", "note":"Notiz", "reminder":"Erinnerung", "titer":"Tollwut-Antikörpertest", "parasite":"Parasitenbehandlung"}
 PET_FIELDS = ["name","species","breed","birth","sex","color","chip","chip_date","chip_location","tattoo","owner","owner_contact","passport","issuer","issued","features","tattoo_location"]
 RECORD_FIELDS = ["kind","title","day","vet","notes","product","batch","valid_from","valid_until","due","weight","dose","dose_unit","duration","dose_times"]
+REMINDER_DAYS = 365
 MAX_FILE = 10 * 1024 * 1024
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -342,7 +343,7 @@ def create_app(config=None):
     def home():
         with db() as con:
             pets = [dict(r) for r in con.execute("SELECT p.*, EXISTS(SELECT 1 FROM pet_photos WHERE pet_id=p.id) AS has_photo FROM pets p ORDER BY name,id")]
-            reminders = reminder_rows(con,30)
+            reminders = reminder_rows(con,REMINDER_DAYS)
             try:
                 selected=date.fromisoformat(request.args.get("week",today().isoformat()))
                 monday=selected-timedelta(days=selected.weekday())
@@ -618,7 +619,7 @@ def create_app(config=None):
     @app.get("/api/v1/reminders")
     def api_reminders():
         try:
-            days=int(request.args.get("days","30"))
+            days=int(request.args.get("days",str(REMINDER_DAYS)))
             if not 0<=days<=3650: raise ValueError()
         except ValueError:
             return jsonify(error="days must be 0..3650"),400

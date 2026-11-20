@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.4 – Jahresvorschau für Erinnerungen
+
+- Dashboard zeigt offene Erinnerungen der nächsten 365 Tage inklusive überfälliger Einträge.
+- Erinnerungs-API nutzt 365 Tage als Standard; individuelle days-Parameter (0–3650) bleiben möglich.
+- Home-Assistant-Beispiele, API-Einstellungen und Anleitung aktualisiert. Bestehende HA-URLs mit days=30 müssen auf days=365 angepasst werden.
+- Medikamenten-API und bestehende Daten unverändert.
+
 ## 0.0.3 – Präparatekatalog für Katzen und Hunde
 
 - 343 Katzen- und 468 Hundeeinträge aus den bereitgestellten A–Z-Listen übernommen (540 unterschiedliche Namen, davon 458 neu).

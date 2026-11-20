@@ -1,11 +1,11 @@
-# 🐾 PetDiary 0.0.3
+# 🐾 PetDiary 0.0.4
 
 **Self-hosted · Docker · SQLite · Home Assistant**
 
 
 Private, ressourcenschonende Tiergesundheitsakte für den eigenen Docker-Server. Keine Cloud, kein JavaScript-Framework, keine zusätzliche Datenbank. Deutschsprachige Weboberfläche in Mintgrün und Petrol, inspiriert von modernen Tiergesundheits-Apps.
 
-**Status:** Version 0.0.3 – erweiterter Präparatekatalog für Katzen und Hunde. Aktuelle Veröffentlichungen unter [Releases](https://github.com/Skoun181/PetDiary/releases). Ein lokales Administratorkonto pro Installation; keine Mehrbenutzerverwaltung.
+**Status:** Version 0.0.4 – Erinnerungsübersicht für 365 Tage. Aktuelle Veröffentlichungen unter [Releases](https://github.com/Skoun181/PetDiary/releases). Ein lokales Administratorkonto pro Installation; keine Mehrbenutzerverwaltung.
 
 [📖 Bebilderte Bedienungsanleitung](docs/USER_GUIDE.md) · [🔑 Passwort zurücksetzen](docs/PASSWORD_RESET.md) · [Änderungen](CHANGELOG.md)
 
@@ -167,11 +167,11 @@ Das neue Passwort zweimal verdeckt eingeben. Alle Daten und der API-Token bleibe
 
 ## Home Assistant
 
-API: GET /api/v1/reminders?days=30. Bearer-Token unter Einstellungen erzeugen; er wird nur direkt nach der Erstellung angezeigt. Ein neuer Token widerruft den alten. days ist 0 bis 3650. Überfällige nicht erledigte Einträge sind immer im Ergebnis enthalten. next ist die früheste offene Erinnerung unabhängig vom Fenster. dates sind ISO-8601; days_left ist negativ bei Überfälligkeit.
+API: GET /api/v1/reminders?days=365. Bearer-Token unter Einstellungen erzeugen; er wird nur direkt nach der Erstellung angezeigt. Ein neuer Token widerruft den alten. Standard ohne days: 365 Tage; days ist weiterhin frei wählbar von 0 bis 3650. Bestehende Home-Assistant-Installationen mit days=30 müssen petdiary_url in secrets.yaml auf days=365 umstellen und Home Assistant neu starten. Überfällige nicht erledigte Einträge sind immer im Ergebnis enthalten. next ist die früheste offene Erinnerung unabhängig vom Fenster. dates sind ISO-8601; days_left ist negativ bei Überfälligkeit.
 
 ```sh
 curl -H "Authorization: Bearer DEIN_API_TOKEN" \
-  "http://127.0.0.1:8080/api/v1/reminders?days=30"
+  "http://127.0.0.1:8080/api/v1/reminders?days=365"
 ```
 
 Antwort (Beispieldaten):
