@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.0.3 – Präparatekatalog für Katzen und Hunde
+
+- 343 Katzen- und 468 Hundeeinträge aus den bereitgestellten A–Z-Listen übernommen (540 unterschiedliche Namen, davon 458 neu).
+- Insgesamt 607 unterschiedliche Grundkatalog-Bezeichnungen inklusive früherer detaillierter Präparatevarianten.
+- Tierart-bezogene Priorisierung und Quellenhinweise in Haupt- und Zusatzmedikamenten; Quellmarkierungen bleiben erhalten, ohne sie in gespeicherte Produktnamen zu übernehmen.
+- Keine automatische Therapieempfehlung oder Zulassungsprüfung. Freitext und bereits gespeicherte Daten bleiben unverändert.
+- Regressionstests für Import, Suchreihenfolge, Markierungen, Varianten und eigene Präparate.
+
 ## 0.0.2 – Medikamentengaben
 
 - Veröffentlichungen über dauerhafte Branches stable und develop mit automatisierten GitHub Releases und Docker Hub Tags.

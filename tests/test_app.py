@@ -221,5 +221,32 @@ class PetDiaryTest(unittest.TestCase):
         self.assertIn(b"Ungespeicherte Gabe",r.data)
         self.assertNotIn(b"Ungespeicherte Gabe",self.client.get(p).data)
 
+    def test_expanded_catalog_species_and_persistence(self):
+        from catalog import ANIMAL_PRODUCT_LISTS, PRODUCTS, product_suggestions
+        self.assertEqual(len(ANIMAL_PRODUCT_LISTS["Katze"]),343)
+        self.assertEqual(len(ANIMAL_PRODUCT_LISTS["Hund"]),468)
+        self.assertEqual(len(PRODUCTS),607)
+        self.assertEqual(len({p.casefold() for p in PRODUCTS}),len(PRODUCTS))
+        cats,cat_hints=product_suggestions(PRODUCTS,"Katze")
+        dogs,dog_hints=product_suggestions(PRODUCTS,"Hund")
+        self.assertLess(cats.index("Bonqat"),cats.index("Advantix"))
+        self.assertLess(dogs.index("Advantix"),dogs.index("Bonqat"))
+        self.assertIn("Nicht in der Katze-Liste",cat_hints["Advantix"])
+        self.assertIn("Humanarzneimittel",cat_hints["Gabapentin"])
+        self.assertIn("Ergänzung",dog_hints["Adaptil"])
+        self.assertIn("Zulassung prüfen",dog_hints["Acepromazin"])
+        self.assertIn("Milpro 16 mg/40 mg – Filmtabletten für Katzen",cats)
+        pet=self.pet("Katalog")
+        form=self.client.get(pet+"/records/new?kind=med").data
+        self.assertIn(b'value="Bonqat"',form)
+        self.assertIn(b'value="Advantix" data-hint="Nicht in der Katze-Liste',form)
+        self.assertNotIn(b'value="Gabapentin**"',form)
+        self.assertEqual(self.post(pet+"/records/new",kind="med",title="Dokumentation",day="2026-12-01",product="Eigene unveraenderte Variante").status_code,303)
+        app2=create_app(dict(TESTING=True,DATA_DIR=self.tmp.name))
+        client=app2.test_client()
+        self.refresh_csrf(client,"/login")
+        self.assertEqual(client.post("/login",data={"csrf":self.csrf,"username":"admin","password":self.password}).status_code,303)
+        self.assertIn(b"Eigene unveraenderte Variante",client.get(pet+"/records/new?kind=med").data)
+
 if __name__=="__main__":
     unittest.main()

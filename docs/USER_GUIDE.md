@@ -1,4 +1,4 @@
-# PetDiary 0.0.2 – Bedienungsanleitung
+# PetDiary 0.0.3 – Bedienungsanleitung
 
 [Zurück zur README](../README.md) · [Passwort zurücksetzen](PASSWORD_RESET.md)
 
@@ -79,6 +79,8 @@ Beispiel: Der Nachweis ist bis 15.12.2027 gültig, erinnert werden möchtest du 
 Der Bereich umfasst auch Vorsorgeeinträge wie Entwurmungen, Parasitenbehandlungen und Tollwut-Antikörpertests. Er ist eine private Abschrift und kein amtlicher EU-Heimtierausweis, keine tierärztliche Bescheinigung und kein Ersatz für erforderliche Originaldokumente bei Reisen.
 
 ## 5. Medikamentengaben und Kalender
+
+Der Katalog enthält 607 unterschiedliche Bezeichnungen (einschließlich vorhandener Präparatevarianten). Die bereitgestellten A–Z-Listen umfassen 343 Katzen- und 468 Hundeeinträge, zusammen 540 unterschiedliche Namen. 458 davon wurden neu ergänzt. Gemeinsame Handels- und Wirkstoffnamen werden nur einmal gespeichert. Die Vorschläge der Tierart erscheinen zuerst; Hinweise zeigen die Herkunftsliste und bewahren die Quellmarkierungen für Ergänzungs-/Pflegeprodukte, Humanarzneimittel bzw. mögliche Umwidmung und zu prüfende Varianten. Alle Einträge, auch unmarkierte, sind ungeprüft. Die Listen dienen ausschließlich der nachträglichen Dokumentation, nicht der Therapieauswahl. Freitext und bereits gespeicherte Namen sowie Pläne bleiben erhalten. Keine Dosierungen oder Indikationen aus den Listen übernommen. Permethrinhaltige Hundepräparate können für Katzen lebensgefährlich sein.
 
 Bei einem Termin oder einer Untersuchung kannst du über **+ Medikament hinzufügen** mehrere Präparate in demselben Eintrag speichern. Bei Kategorie Medikament gibt es ein Hauptpräparat und weitere Medikamentenblöcke. Wähle bei jedem Präparat **Bereits verabreicht**, wenn es direkt in der Praxis gegeben wurde: Uhrzeit und Dauer sind dann nicht nötig; Menge und Einheit sind optional. Es entsteht kein offener Kalendereintrag. Wähle für die weitere Behandlung **Medikamentenplan anlegen**. Jedes zusätzliche Präparat hat sein eigenes Datum, seine Menge, Einheit, Dauer und optional bis zu zwölf Uhrzeiten. Ohne Uhrzeit wird eine tägliche Gabe ohne feste Uhrzeit erstellt. Die Gabe kann trotzdem einzeln abgehakt werden.
 

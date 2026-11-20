@@ -1,11 +1,11 @@
-# 🐾 PetDiary 0.0.2
+# 🐾 PetDiary 0.0.3
 
 **Self-hosted · Docker · SQLite · Home Assistant**
 
 
 Private, ressourcenschonende Tiergesundheitsakte für den eigenen Docker-Server. Keine Cloud, kein JavaScript-Framework, keine zusätzliche Datenbank. Deutschsprachige Weboberfläche in Mintgrün und Petrol, inspiriert von modernen Tiergesundheits-Apps.
 
-**Status:** Version 0.0.2. Die automatisierten Integrationstests und der Docker-Hub-Build für den Medikamenten-Bugfix waren erfolgreich. Ein lokales Administratorkonto pro Installation; keine Mehrbenutzerverwaltung.
+**Status:** Version 0.0.3 – erweiterter Präparatekatalog für Katzen und Hunde. Aktuelle Veröffentlichungen unter [Releases](https://github.com/Skoun181/PetDiary/releases). Ein lokales Administratorkonto pro Installation; keine Mehrbenutzerverwaltung.
 
 [📖 Bebilderte Bedienungsanleitung](docs/USER_GUIDE.md) · [🔑 Passwort zurücksetzen](docs/PASSWORD_RESET.md) · [Änderungen](CHANGELOG.md)
 
@@ -40,6 +40,10 @@ Bei Impfungen bedeutet Gültig bis das dokumentierte Ende des Impfschutzes bzw. 
 ### Home Assistant – Medikamentenplan
 
 GET /api/v1/medications?days=7 liefert geplante Gaben ab dem heutigen Tag (optional start=YYYY-MM-DD; days 1–31). Nutzt denselben Bearer-Token wie die Erinnerungs-API. Antwortfelder: count (offene Gaben im Fenster), due_count (bereits fällige offene Gaben im Fenster), next (nächste offene zukünftige Gabe oder null), medications (Liste mit stabiler id, record_id, pet_id, pet, title, product, dose, unit, day, time, scheduled_at mit Zeitzonenoffset (null ohne feste Uhrzeit), entry_id (zugehöriger Akteneintrag), done), timezone. Zeitumstellung: Uhrzeiten werden als lokale Kalenderzeit gespeichert, bei mehrdeutigen Zeiten gilt die erste Stunde; Sonderfälle bitte manuell prüfen. Eine Beispiel-REST-Konfiguration liegt unter examples/home-assistant-medications.yaml. Push-Automationen sind noch nicht Bestandteil der Anwendung.
+
+### Präparatekatalog A–Z (0.0.3)
+
+Der Katalog enthält 607 unterschiedliche Bezeichnungen (einschließlich vorhandener Präparatevarianten). Die bereitgestellten A–Z-Listen umfassen 343 Katzen- und 468 Hundeeinträge, zusammen 540 unterschiedliche Namen. 458 davon wurden neu ergänzt. Gemeinsame Handels- und Wirkstoffnamen werden nur einmal gespeichert. Die Vorschläge der Tierart erscheinen zuerst; Hinweise zeigen die Herkunftsliste und bewahren die Quellmarkierungen für Ergänzungs-/Pflegeprodukte, Humanarzneimittel bzw. mögliche Umwidmung und zu prüfende Varianten. Alle Einträge, auch unmarkierte, sind ungeprüft. Die Listen dienen ausschließlich der nachträglichen Dokumentation, nicht der Therapieauswahl. Freitext und bereits gespeicherte Namen sowie Pläne bleiben erhalten. Keine Dosierungen oder Indikationen aus den Listen übernommen. Permethrinhaltige Hundepräparate können für Katzen lebensgefährlich sein.
 
 ## Installation
 

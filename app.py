@@ -13,7 +13,7 @@ from pathlib import Path
 from flask import Flask, abort, request, render_template, redirect, url_for, jsonify, flash, session
 from io import BytesIO
 from flask import send_file
-from catalog import BREEDS, COLORS, SEX, CHIP_LOCATIONS, TATTOO_LOCATIONS, PRODUCTS
+from catalog import BREEDS, COLORS, SEX, CHIP_LOCATIONS, TATTOO_LOCATIONS, PRODUCTS, product_suggestions
 
 CATEGORIES = {"visit":"Termin", "vaccine":"Impfung", "exam":"Untersuchung", "lab":"Labor/Befund", "med":"Medikament", "worm":"Entwurmung", "weight":"Gewicht", "food":"Ernährung", "note":"Notiz", "reminder":"Erinnerung", "titer":"Tollwut-Antikörpertest", "parasite":"Parasitenbehandlung"}
 PET_FIELDS = ["name","species","breed","birth","sex","color","chip","chip_date","chip_location","tattoo","owner","owner_contact","passport","issuer","issued","features","tattoo_location"]
@@ -573,8 +573,8 @@ def create_app(config=None):
                 except (ValueError,OverflowError) as e:
                     flash(str(e),"error")
                     record={**record,**request.form.to_dict(),"dose_times":",".join(request.form.getlist("dose_clock")) or request.form.get("dose_times","")}
-            products=[r[0] for r in con.execute("SELECT name FROM products ORDER BY name COLLATE NOCASE")]
-            return page("record_edit",pet=pet,record=record,rid=rid,files=files,products=products,extras=extras)
+            products,product_hints=product_suggestions([r[0] for r in con.execute("SELECT name FROM products ORDER BY name COLLATE NOCASE")],pet["species"])
+            return page("record_edit",pet=pet,record=record,rid=rid,files=files,products=products,product_hints=product_hints,extras=extras)
 
     @app.post("/records/<int:rid>/delete")
     def record_delete(rid):
