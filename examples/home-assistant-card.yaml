@@ -6,7 +6,7 @@ content: >
   {% if rows is none %}
   PetDiary derzeit nicht verfügbar.
   {% elif not rows %}
-  Keine offenen Erinnerungen in den nächsten 30 Tagen.
+  Keine offenen Erinnerungen in den nächsten 365 Tagen.
   {% else %}
   {% for r in rows %}
   - **{{ r.pet }}:** {{ r.title }} – {{ r.due }}
