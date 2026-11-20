@@ -109,21 +109,11 @@ Medikamentengaben besitzen einen eigenen Status pro Uhrzeit und Datum im Kalende
 
 ## 7. Home Assistant
 
-1. In PetDiary unter **Einstellungen → Home Assistant** das aktuelle Passwort bestätigen und einen API-Token erstellen.
-2. Den Token sofort sicher kopieren. Er wird nur bei Erstellung angezeigt. Ein neuer Token widerruft den alten.
-3. Die Beispielkonfigurationen [Erinnerungen](../examples/home-assistant.yaml) und [Medikamente](../examples/home-assistant-medications.yaml) unter derselben vorhandenen `rest:`-Liste in Home Assistant zusammenführen (nicht zwei gleichnamige YAML-Schlüssel anlegen).
-4. In `secrets.yaml` die tatsächlichen Adressen mit erreichbarer HTTPS- oder LAN-Adresse und den Bearer-Header eintragen:
+Die [ausführliche Home-Assistant-Anleitung](HOME_ASSISTANT.md) enthält alle Schritte: API-Token, secrets.yaml, kombinierte REST-Sensoren, Dashboard-Karte mit Erinnerungs- und Medikamentendetails, Netzwerk-/Firewall-Prüfung und Fehlerbehebung. Keine HACS-Erweiterung nötig.
 
-```yaml
-petdiary_url: "https://PETDIARY-HOST/api/v1/reminders?days=365"
-petdiary_medication_url: "https://PETDIARY-HOST/api/v1/medications?days=1"
-petdiary_authorization: "Bearer DEIN_TOKEN"
-```
+![Home Assistant – schematische Vorschau](images/home-assistant.svg)
 
-5. HA-Konfiguration prüfen und neu laden bzw. neu starten. Über **Entwicklerwerkzeuge → Zustände** die tatsächlich erzeugten Entity-IDs überprüfen.
-6. Die [Dashboard-Karte](../examples/home-assistant-card.yaml) als manuelle Markdown-Karte hinzufügen und Entity-IDs ggf. ändern.
-
-Die Erinnerungs-API verwendet ohne days-Parameter 365 Tage. Bei bestehender Home-Assistant-Konfiguration days=30 in secrets.yaml durch days=365 ersetzen und Home Assistant neu starten. Die API ist lesend. Datumsfälligkeiten sind in der Zeitzone des Servers, standardmäßig Europe/Berlin; Medikamentenzeiten enthalten einen Offset; ohne Uhrzeit liefert die API time als leeren String, scheduled_at als null und entry_id als zugehörigen Akteneintrag. Die Medikamenten-API liefert nur das gewählte Zeitfenster. Eine HA-Benachrichtigungsautomation muss separat angelegt werden. PetDiary verschickt keine eigenen Push-Nachrichten. Verlass dich bei medizinisch kritischen Gaben nicht auf eine einzige Polling-Automation.
+Die Erinnerungs-API verwendet ohne days-Parameter 365 Tage. Bestehende HA-URLs mit days=30 in secrets.yaml auf days=365 umstellen und HA neu starten. Die API ist nur lesend. Gaben werden in PetDiary abgehakt, nicht in Home Assistant.
 
 ## 8. Einstellungen und Wartung
 
