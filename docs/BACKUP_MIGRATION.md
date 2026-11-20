@@ -1,6 +1,6 @@
 # 📦 PetDiary: Datenexport, Import und Serverumzug
 
-**Status:** Entwicklung für Version 0.0.5 auf dem Branch `develop`. Die derzeitige stabile Version `0.0.4` auf Docker Hub hat diese Browserfunktionen noch nicht. Die bestehende `stable`-Installation muss nicht verändert werden, um die neue Version in einem separaten Container zu testen.
+**Status:** Ab PetDiary **0.0.5** sind ZIP-Export und -Import im offiziellen Docker-Hub-Image (`skoun181/petdiary:0.0.5` bzw. `stable`) enthalten. Ältere Installationen auf **0.0.4** haben keinen Exportknopf und benötigen den einmaligen Umweg in Abschnitt 6. Der Branch `develop` kann weiterhin separat in einem Testcontainer ausgeführt werden.
 
 ## 1. Was wird gesichert?
 
@@ -17,12 +17,13 @@ Die portable Datei `petdiary-backup-YYYY-MM-DD-HHMMSS.zip` enthält:
 
 **Beim Import** bleiben das bestehende Administratorkonto und der API-Token **der Zielinstanz** erhalten. Beim Wechsel auf einen neuen Server zunächst in der neuen Instanz ein eigenes Admin-Konto anlegen, dann die ZIP-Datei importieren. Danach den Home-Assistant-Endpunkt gegebenenfalls an die neue Server-IP anpassen; der Quell-Token wird nicht übertragen.
 
-## 2. Export direkt im Browser (develop / ab geplantem 0.0.5-Release)
+## 2. Export direkt im Browser (ab 0.0.5)
 
 1. In PetDiary einloggen und **Einstellungen → Daten sichern und umziehen** öffnen.
 2. Unter **Daten exportieren** das aktuelle Passwort eingeben.
 3. **ZIP-Backup herunterladen** auswählen. Während des Downloads erscheint ein Ladezustand, anschließend eine Rückmeldung.
 4. ZIP auf einem geschützten externen Datenträger sichern. Nicht in öffentlichen Git-Repositories oder ungeschützten Clouds ablegen.
+5. Falls Dockhand beim Herunterladen ein Archiv mit der Endung `.zip.tar` erzeugt, **nur die äußere TAR-Hülle entpacken**. Die innere ZIP-Datei unverändert importieren.
 
 Die ZIP-Datei muss nicht manuell entpackt werden. Große Installationen brauchen genügend freien Platz auf dem gemounteten `/data`-Volume, da während des Exports eine temporäre Datenbankkopie entsteht. Maximal 256 MiB ZIP und 1 GiB entpackte SQLite-Datenbank.
 
@@ -50,18 +51,18 @@ Die ZIP-Datei muss nicht manuell entpackt werden. Große Installationen brauchen
 
 `docker export` und ein Image-Pull enthalten **keine** Daten aus Docker-Volumes. `docker compose down -v` oder `docker volume rm` können deine Tierakte endgültig löschen – nicht verwenden.
 
-## 5. Sicher auf develop testen – parallel zu stable (empfohlen)
+## 5. Optional: develop parallel zu stable testen
 
-Der neue Code wird bewusst **nicht** als Docker-Hub-`latest` veröffentlicht, solange er nur in `develop` liegt. Für einen getrennten Testcontainer wird das Image daher aus dem Git-Branch gebaut.
+**Die Export-/Importfunktion ist jetzt ab 0.0.5 als Docker-Hub-Release verfügbar.** Dieser Abschnitt zeigt eine zusätzliche, vollständig isolierte `develop`-Testinstanz für zukünftige Änderungen. Die `develop`-Builds werden weiterhin nicht automatisch auf Docker Hub veröffentlicht.
 
 **In Dockhand (Git-Stack):**
 
-1. Den bestehenden PetDiary-Stack mit `skoun181/petdiary:latest` unverändert weiterlaufen lassen (Hostport 8080 und altes Volume).
+1. Den bestehenden PetDiary-Stable-Stack mit `skoun181/petdiary:stable` unverändert weiterlaufen lassen (Hostport 8080 und altes Volume).
 2. In Dockhand einen **neuen Git-Stack** anlegen, z. B. `petdiary-develop`.
 3. Git-Repository: `https://github.com/Skoun181/PetDiary.git`, Branch **`develop`**, Compose-Datei **`compose.develop.yaml`** aus der Repository-Wurzel. Den Build aus Git/Dockerfile beim Deploy aktivieren.
 4. Deployen. Die Entwicklungsinstanz bekommt den Container `petdiary-develop`, Hostport **8081** und das ausdrücklich getrennte Volume `petdiary-develop-data`.
 5. `http://DEIN-SERVER:8081` öffnen, dort ein eigenes Admin-Konto einrichten. Es ist zunächst **eine leere Testinstanz**.
-6. Eine portable Sicherung der bisherigen Daten importieren (Schritt 6 erklärt das einmalig für stable 0.0.4). Änderungen in der Testinstanz verändern **nicht** die alten Daten.
+6. Eine portable Sicherung über die Exportfunktion von Stable (ab 0.0.5) importieren; bei alten 0.0.4-Installationen Abschnitt 6 befolgen. Änderungen in der Testinstanz verändern **nicht** die alten Daten.
 7. Export und Rückimport sowie Fotos, Anhänge, Termine und Medikamente prüfen. Die Originalinstanz auf Port 8080 läuft unverändert weiter.
 
 Alternativ über eine Docker-Konsole auf einem Testhost:
@@ -74,9 +75,9 @@ docker compose -f compose.develop.yaml up -d --build
 
 Für eine weitere Testinstanz die festen Namen und den Hostport jeweils anpassen, sonst entstehen Konflikte.
 
-## 6. Einmaliger Export deiner aktuellen stable 0.0.4
+## 6. Einmaliger Export aus einer alten 0.0.4-Installation
 
-Die bestehende 0.0.4 bietet noch keinen Downloadknopf. Um die Daten in die neue, isolierte Testinstanz zu übernehmen, kannst du zuerst ein **konsistentes SQLite-Backup** aus dem laufenden Container erzeugen und anschließend mit dem neuen, rein Python-basierten Werkzeug in eine portable, von Zugangsdaten bereinigte ZIP-Datei umwandeln.
+Version 0.0.4 bietet noch keinen Downloadknopf. Um die Daten in die neue, isolierte Testinstanz zu übernehmen, kannst du zuerst ein **konsistentes SQLite-Backup** aus dem laufenden Container erzeugen und anschließend mit dem neuen, rein Python-basierten Werkzeug in eine portable, von Zugangsdaten bereinigte ZIP-Datei umwandeln.
 
 Befehle auf einem Rechner mit Docker-Zugriff auf den alten Host (z. B. per Docker CLI/SSH):
 
@@ -105,15 +106,15 @@ Falls nur die Dockhand-Weboberfläche verfügbar ist und du keinen Docker-Host-Z
 
 ## 7. Auf einen neuen Server / Rechner umziehen
 
-1. Quellinstallation sichern – bei 0.0.4 über Abschnitt 6, später direkt über **Daten exportieren**.
+1. Quellinstallation sichern – bei 0.0.4 über Abschnitt 6, ab 0.0.5 direkt über **Daten exportieren**.
 2. ZIP auf den neuen Rechner übertragen (z. B. USB oder sichere Dateiübertragung).
-3. Docker Engine/Compose installieren oder in Dockhand einen neuen PetDiary-Stack anlegen. Für stable nach Veröffentlichung des Features das veröffentlichte Image nutzen; für den jetzigen Vorabtest Git-Branch `develop` und `compose.develop.yaml` bauen.
+3. Docker Engine/Compose installieren oder in Dockhand einen neuen PetDiary-Stack mit dem veröffentlichten Image **`skoun181/petdiary:0.0.5`** anlegen. Nur für experimentelle Entwicklung `develop` und `compose.develop.yaml` bauen.
 4. **Neues leeres Volume** unter `/data` anlegen, Container starten, Browser-Ersteinrichtung mit neuen Zugangsdaten durchführen.
 5. ZIP über das neue Browserformular importieren, anschließend alle Daten und Dateien prüfen.
 6. Portfreigabe/Reverse Proxy und Home-Assistant-REST-URL bei Bedarf auf die neue IP/Port ändern. Einen neuen API-Token nur erzeugen, wenn noch keiner in der Zielinstanz existiert.
 7. Alte Installation erst nach erfolgreicher Prüfung außer Betrieb nehmen; das alte Volume und externe Backups zunächst behalten.
 
-### Docker Compose für einen separaten Entwicklungscontainer
+### Docker Compose für einen optionalen separaten Entwicklungscontainer
 
 [compose.develop.yaml](../compose.develop.yaml) verwendet `build: .`, Hostport 8081 und `petdiary-develop-data:/data`. Der `stable`-Stack auf Hostport 8080 bleibt unberührt. Wenn du eine produktive Installation später auf develop umstellen willst, **niemals unbemerkt auf ein neues leeres Volume wechseln**.
 
@@ -170,7 +171,7 @@ Danach `/healthz`, Anmeldung und alle Tierakten prüfen. PetDiary bewahrt automa
 
 ## 9. Technische Grenzen und Sicherheit
 
-- ZIP: maximal 256 MiB komprimiert, SQLite maximal 1 GiB entpackt; Dateinamen sind auf die zwei erwarteten Archivmitglieder beschränkt, ZIP-Symlinks und verschlüsselte Einträge werden abgewiesen.
+- ZIP: maximal 256 MiB komprimiert, SQLite maximal 1 GiB entpackt; Dateinamen sind auf die zwei erwarteten Archivmitglieder beschränkt, ZIP-Symlinks, außergewöhnlich starke Komprimierung und verschlüsselte Einträge werden abgewiesen.
 - Serverseitige Validierung: Schema-Version 1, App-Version-Metadaten, SHA-256, CRC beim Lesen, SQLite-`integrity_check`, Fremdschlüssel und Tabellenstruktur. Freitextinhalte werden beim Import nicht als SQL ausgeführt.
 - Die Datenübernahme verwendet eine SQLite-Transaktion. Wenn sie fehlschlägt, bleibt die bisherige Akte erhalten.
 - Export und Import verlangen eine gültige Sitzung, CSRF-Schutz und erneute Eingabe des Adminpassworts. Import zusätzlich eine ausdrückliche Ersetzungsbestätigung.
