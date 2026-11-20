@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.0.5 – Portables Backup, Import und Serverumzug
+
+- ZIP-Export über Einstellungen mit SQLite Online-Backup, Metadaten, Prüfsumme und vollständigen Bildern/PDFs.
+- Administratorpasswort-Hash, API-Token-Hash, Session-Geheimnis und Kontodaten bleiben aus portablen Exporten ausgeschlossen; nach dem Import gelten ausschließlich die Zugänge der Zielinstanz.
+- ZIP-Import mit Integritäts-, Schema-, Größen- und Pfadprüfung, automatischem internen Sicherheitsbackup und atomarem Datenersatz.
+- Separate Dockhand-Testinstallation mit eigenem Volume und Port 8081; die produktive Stable-Installation lässt sich ebenfalls ohne Datenverlust aktualisieren, sofern das bestehende Volume erhalten bleibt.
+- Vollständige Schritt-für-Schritt-Anleitung für Export, Import, alte 0.0.4-Versionen und Dockhand-Umzüge.
+
+
 ## 0.0.4 – Jahresvorschau für Erinnerungen
 
 - Dashboard zeigt offene Erinnerungen der nächsten 365 Tage inklusive überfälliger Einträge.
@@ -35,4 +44,3 @@
 - Persistentes SQLite-Volume, Docker Compose, Backup- und Passwort-Recovery-Dokumentation.
 - Illustrationen und Projekt-Handbuch.
 
-Status: Quellcode-Vorabversion; Docker-Build, Integrationstests und Release-/Registry-Veröffentlichung noch zu verifizieren.

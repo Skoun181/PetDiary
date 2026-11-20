@@ -24,3 +24,8 @@ Standardbranch auf stable setzen. Branch-Regeln für stable: Pull Requests vorau
 Unter [Actions](https://github.com/Skoun181/PetDiary/actions) den fehlgeschlagenen Schritt öffnen. Bei einem Fehler vor dem GitHub Release kann der fehlgeschlagene Job nach Behebung erneut ausgeführt werden. Wenn ein Docker-Versionstag bereits veröffentlicht wurde, aber das GitHub Release fehlt, zuerst prüfen, ob Image, Commit und VERSION zusammengehören; dann fehlendes Release für genau diesen Commit nachtragen. Nicht blind bestehende Tags überschreiben. Manuell gestartete Workflows veröffentlichen ausschließlich vom Branch stable.
 
 [Releases](https://github.com/Skoun181/PetDiary/releases) · [Docker Hub](https://hub.docker.com/r/skoun181/petdiary/tags)
+
+## Version 0.0.5
+
+Die ZIP-Export-/Importfunktion wurde nach erfolgreichen Integrationstests und Docker-Smoke-Test aus `develop` über einen Pull Request nach `stable` übernommen. Der Release-Workflow erstellt die GitHub-Version `v0.0.5` und Docker-Hub-Tags `0.0.5`, `latest` und `stable`. Ein Umzug vorhandener produktiver Instanzen ist ausschließlich nach einer separaten Sicherung und Erhalt des bisherigen Volumes zu empfehlen. Für ältere 0.0.4-Installationen steht der einmalige Offline-Konverter in [BACKUP_MIGRATION.md](BACKUP_MIGRATION.md) bereit.
+

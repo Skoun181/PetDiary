@@ -21,6 +21,33 @@ jobs:
       - run: pip install -r requirements.txt
       - run: python -m unittest discover -s tests -v
 
+  # Development-only smoke test. Never pushes images or publishes GitHub releases.
+  image-smoke:
+    needs: test
+    if: github.ref == 'refs/heads/develop' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build develop Docker image
+        run: docker build -t petdiary:develop-ci .
+      - name: Smoke test read-only container with persistent SQLite volume
+        run: |
+          docker run -d --name petdiary-smoke -p 127.0.0.1:18080:8080 \
+            -v petdiary-smoke-data:/data --read-only --tmpfs /tmp:size=64m,mode=1777 \
+            --cap-drop ALL --security-opt no-new-privileges:true --init \
+            petdiary:develop-ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:18080/healthz; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs petdiary-smoke
+          exit 1
+      - name: Cleanup
+        if: always()
+        run: docker rm -f petdiary-smoke || true
+
   publish:
     needs: test
     if: github.ref == 'refs/heads/stable' && github.event_name != 'pull_request'

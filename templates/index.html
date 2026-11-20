@@ -41,6 +41,27 @@
 <label>Neues Passwort<input name="password" type="password" autocomplete="new-password" required minlength="12" maxlength="256"></label>
 <label>Neues Passwort wiederholen<input name="confirm_password" type="password" autocomplete="new-password" required minlength="12" maxlength="256"></label>
 <button>Kontodaten speichern</button></form></section>
+<section class="card" id="backups">
+<h2>📦 Daten sichern und umziehen</h2>
+<p>Erstelle ein portables ZIP mit allen Tierprofilen, Akteneinträgen, Medikamentenplänen, Erledigt-Häkchen, eigenen Präparaten und allen Bildern und PDF-Anhängen. Passwörter, API-Token und Sitzungsschlüssel werden <strong>nicht</strong> exportiert.</p>
+<p class="muted">Die ZIP-Datei enthält persönliche Tier- und Halterdaten. Bewahre sie geschützt auf und lösche ungeschützte Kopien nach dem Umzug.</p>
+<form method="post" action="{{ url_for('backup_export') }}" data-backup="export">{{ csrf_field() }}
+<label>Aktuelles Passwort zur Bestätigung<input type="password" name="current_password" autocomplete="current-password" maxlength="256" required></label>
+<button type="submit"><span data-backup-label>ZIP-Backup herunterladen</span></button>
+</form>
+<hr class="backup-divider">
+<h3>Backup importieren</h3>
+<p class="backup-danger"><strong>Achtung: Der Import ersetzt alle vorhandenen Tier- und Gesundheitsdaten dieser Instanz.</strong> Bestehende Admin-Zugangsdaten und der Home-Assistant-API-Token dieser Instanz bleiben erhalten. Vor dem Import erstellt PetDiary automatisch eine interne Sicherheitskopie der Datenbank.</p>
+<form method="post" action="{{ url_for('backup_import') }}" enctype="multipart/form-data" data-backup="import">{{ csrf_field() }}
+<label>PetDiary-Backup (.zip, maximal 256 MiB)<input type="file" name="backup" accept=".zip,application/zip" required></label>
+<label>Aktuelles Passwort<input type="password" name="current_password" autocomplete="current-password" maxlength="256" required></label>
+<label>Zur Bestätigung ERSETZEN eintippen<input type="text" name="confirm_text" required pattern="ERSETZEN" autocomplete="off" placeholder="ERSETZEN"></label>
+<label class="backup-check"><input type="checkbox" name="confirm_overwrite" value="yes" required><span>Mir ist bewusst, dass alle vorhandenen Tier- und Gesundheitsdaten dieser Instanz ersetzt werden.</span></label>
+<button class="danger" type="submit"><span data-backup-label>Backup importieren und Daten ersetzen</span></button>
+</form>
+<div id="backup-result" role="status" aria-live="polite" class="backup-result" hidden></div>
+<p class="muted">Sicherheits-Backups werden intern unter <code>/data/.petdiary-safety-backups/</code> gespeichert und enthalten aus Wiederherstellungsgründen auch die bisherigen Zugangsdaten der Zielinstanz. Sichere den Server und das Volume entsprechend.</p>
+</section>
 <section class="card"><h2>Abmelden</h2><form method="post" action="{{ url_for('logout') }}">{{ csrf_field() }}<button class="secondary">Abmelden</button></form></section>
 {% elif screen=='home' %}
 <section class="hero"><div><p class="eyebrow">FÜR DEINE LIEBLINGE</p><h1>Hallo, Tierfreund!</h1><p>Die Gesundheit deiner Tiere. Alles an einem Ort.</p><a class="button" href="{{ url_for('pet_edit') }}">+ Tier hinzufügen</a></div><span class="hero-art" aria-hidden="true">🐾</span></section>

@@ -276,5 +276,168 @@ class PetDiaryTest(unittest.TestCase):
         self.assertIn(b"AusserhalbTest",self.client.get("/reminders").data)
         self.assertIn(b"?days=365",self.client.get("/settings").data)
 
+
+    def make_portable_backup(self):
+        response=self.client.post("/settings/backups/export",
+            data={"csrf":self.csrf,"current_password":self.password},
+            headers={"Accept":"application/json"})
+        self.assertEqual(response.status_code,200,response.get_data(as_text=True)[:300] if response.status_code!=200 else "")
+        self.assertIn("application/zip",response.content_type)
+        self.assertIn("petdiary-backup-",response.headers["Content-Disposition"])
+        result=response.data
+        response.close()
+        return result
+
+    def test_portable_backup_roundtrip_and_destination_credentials(self):
+        import hashlib
+        import json
+        import sqlite3
+        import zipfile
+        from pathlib import Path
+        a=self.pet("Kopie")
+        png=base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jR1sAAAAASUVORK5CYII=")
+        self.assertEqual(self.post(a+"/records/new",kind="exam",title="Bild im Befund",
+                                  day="2026-11-20",files=(io.BytesIO(png),"bild.png")).status_code,303)
+        self.assertEqual(self.post(a+"/records/new",kind="med",title="Plan",day="2026-11-20",
+                                  product="Eigene Tablette",dose="1",dose_unit="Tablette",duration="3",
+                                  dose_clock=["08:00","20:00"]).status_code,303)
+        med=self.client.get("/api/v1/medications?start=2026-11-20&days=3",headers=self.api).get_json()
+        self.assertEqual(med["count"],6)
+        rid=med["medications"][0]["record_id"]
+        self.assertEqual(self.post(f"/medications/{rid}/check",day="2026-11-20",clock="08:00",action="mark").status_code,303)
+        with sqlite3.connect(Path(self.tmp.name)/"petdiary.sqlite3") as con:
+            secret=con.execute("SELECT value FROM app_settings WHERE key='session_secret'").fetchone()[0]
+            tokenhash=con.execute("SELECT value FROM app_settings WHERE key='api_token_hash'").fetchone()[0]
+            pwdhash=con.execute("SELECT password_hash FROM admin_account").fetchone()[0]
+        exported=self.make_portable_backup()
+        with zipfile.ZipFile(io.BytesIO(exported)) as archive:
+            self.assertEqual(set(archive.namelist()),{"manifest.json","petdiary.sqlite3"})
+            meta=json.loads(archive.read("manifest.json"))
+            raw=archive.read("petdiary.sqlite3")
+            self.assertEqual(meta["schema_version"],1)
+            self.assertEqual(meta["app_version"],"0.0.5")
+            self.assertEqual(hashlib.sha256(raw).hexdigest(),meta["database_sha256"])
+            self.assertEqual(meta["counts"]["attachments"],1)
+            self.assertNotIn(secret.encode(),raw)
+            self.assertNotIn(tokenhash.encode(),raw)
+            self.assertNotIn(pwdhash.encode(),raw)
+            dbfile=Path(self.tmp.name)/"export-inspect.sqlite3"
+            dbfile.write_bytes(raw)
+            with sqlite3.connect(dbfile) as con:
+                self.assertEqual(con.execute("SELECT count(*) FROM admin_account").fetchone()[0],0)
+                self.assertEqual(con.execute("SELECT count(*) FROM app_settings").fetchone()[0],0)
+                self.assertEqual(con.execute("SELECT count(*) FROM attachments").fetchone()[0],1)
+                self.assertEqual(con.execute("PRAGMA user_version").fetchone()[0],1)
+        with tempfile.TemporaryDirectory() as newdir:
+            newapp=create_app(dict(TESTING=True,DATA_DIR=newdir))
+            other=newapp.test_client()
+            other.get("/setup")
+            with other.session_transaction() as sess:
+                csrftoken=sess["csrf"]
+            newpass="different-admin-pass123"
+            self.assertEqual(other.post("/setup",data={"csrf":csrftoken,"username":"different",
+                "password":newpass,"confirm_password":newpass}).status_code,303)
+            # Creating the session rotates the CSRF secret.
+            other.get("/settings")
+            with other.session_transaction() as sess:
+                csrftoken=sess["csrf"]
+            response=other.post("/settings",data={"csrf":csrftoken,"action":"generate",
+                     "current_password":newpass})
+            import re
+            other_token=re.search(rb'Neuer API-Token<input readonly value="([^"]+)"',response.data).group(1).decode()
+            self.assertEqual(other.post("/pets/new",data={"csrf":csrftoken,"name":"Alter Bestand",
+                              "species":"Hund"}).status_code,303)
+            imported=other.post("/settings/backups/import",
+                 data={"csrf":csrftoken,"current_password":newpass,"confirm_text":"ERSETZEN",
+                       "confirm_overwrite":"yes","backup":(io.BytesIO(exported),"petdiary.zip")},
+                 headers={"Accept":"application/json"})
+            self.assertEqual(imported.status_code,200,imported.get_data(as_text=True))
+            data=imported.get_json()
+            self.assertTrue(data["ok"])
+            self.assertEqual(data["imported"]["pets"],1)
+            self.assertEqual(data["imported"]["records"],2)
+            self.assertEqual(data["imported"]["attachments"],1)
+            self.assertIn(b"Kopie",other.get("/").data)
+            self.assertNotIn(b"Alter Bestand",other.get("/").data)
+            self.assertEqual(other.get("/attachments/1/content").data,png)
+            checks=other.get("/api/v1/medications?start=2026-11-20&days=3",
+                  headers={"Authorization":"Bearer "+other_token}).get_json()
+            self.assertEqual(checks["count"],5)
+            self.assertEqual(other.get("/api/v1/reminders",headers=self.api).status_code,401)
+            with sqlite3.connect(Path(newdir)/"petdiary.sqlite3") as con:
+                self.assertEqual(con.execute("SELECT username FROM admin_account").fetchone()[0],"different")
+            safety=Path(newdir)/".petdiary-safety-backups"/data["safety_backup"]
+            self.assertTrue(safety.is_file())
+            with sqlite3.connect(safety) as con:
+                self.assertEqual(con.execute("SELECT name FROM pets").fetchone()[0],"Alter Bestand")
+                self.assertEqual(con.execute("SELECT username FROM admin_account").fetchone()[0],"different")
+            self.assertEqual(other.get("/healthz").status_code,200)
+
+    def test_portable_restore_validation_keeps_existing_data(self):
+        import hashlib
+        import json
+        import sqlite3
+        import zipfile
+        from pathlib import Path
+        self.pet("Sicher behalten")
+        exported=self.make_portable_backup()
+        with zipfile.ZipFile(io.BytesIO(exported)) as source:
+            manifest=json.loads(source.read("manifest.json"))
+            database=source.read("petdiary.sqlite3")
+        def modified_zip(meta, payload=database, badname=None):
+            buff=io.BytesIO()
+            with zipfile.ZipFile(buff,"w",compression=zipfile.ZIP_DEFLATED) as target:
+                target.writestr("manifest.json",json.dumps(meta))
+                target.writestr(badname or "petdiary.sqlite3",payload)
+            return buff.getvalue()
+        cases=[
+            ("wrong-hash.zip",modified_zip({**manifest,"database_sha256":"0"*64})),
+            ("future-schema.zip",modified_zip({**manifest,"schema_version":99})),
+            ("traversal.zip",modified_zip(manifest,badname="../petdiary.sqlite3")),
+            ("not-zip.zip",b"invalid zip"),
+        ]
+        for filename,data in cases:
+            response=self.client.post("/settings/backups/import",
+                data={"csrf":self.csrf,"current_password":self.password,"confirm_text":"ERSETZEN",
+                     "confirm_overwrite":"yes","backup":(io.BytesIO(data),filename)},
+                headers={"Accept":"application/json"})
+            self.assertEqual(response.status_code,400,(filename,response.get_data(as_text=True)))
+            self.assertIn(b"Sicher behalten",self.client.get("/").data)
+        safety=Path(self.tmp.name)/".petdiary-safety-backups"
+        self.assertFalse(safety.exists())
+        wrong=self.client.post("/settings/backups/export",
+            data={"csrf":self.csrf,"current_password":"not-right"},
+            headers={"Accept":"application/json"})
+        self.assertEqual(wrong.status_code,403)
+        self.assertEqual(self.client.post("/settings/backups/export",
+            data={"current_password":self.password}).status_code,403)
+
+    def test_portable_restore_rolls_back_failed_insert(self):
+        import sqlite3
+        import backups
+        from pathlib import Path
+        self.pet("Vorher")
+        exported=self.make_portable_backup()
+        # Simulate an unexpected failure while replacing rows.
+        original=backups._replace_data
+        def fail_after_delete(source,database,default_products):
+            dest=sqlite3.connect(database)
+            try:
+                with dest:
+                    dest.execute("PRAGMA foreign_keys=ON")
+                    dest.execute("DELETE FROM pets")
+                    raise sqlite3.IntegrityError("forced failure")
+            finally:
+                dest.close()
+        from unittest.mock import patch
+        with patch("backups._replace_data",side_effect=fail_after_delete):
+            response=self.client.post("/settings/backups/import",
+                data={"csrf":self.csrf,"current_password":self.password,"confirm_text":"ERSETZEN",
+                     "confirm_overwrite":"yes","backup":(io.BytesIO(exported),"valid.zip")},
+                headers={"Accept":"application/json"})
+        self.assertEqual(response.status_code,400,response.get_data(as_text=True))
+        self.assertIn(b"Vorher",self.client.get("/").data)
+        self.assertEqual(self.client.get("/healthz").status_code,200)
+
 if __name__=="__main__":
     unittest.main()

@@ -13,6 +13,7 @@ from pathlib import Path
 from flask import Flask, abort, request, render_template, redirect, url_for, jsonify, flash, session
 from io import BytesIO
 from flask import send_file
+from backups import BackupError, MAX_ARCHIVE_BYTES, create_portable_backup, restore_portable_backup
 from catalog import BREEDS, COLORS, SEX, CHIP_LOCATIONS, TATTOO_LOCATIONS, PRODUCTS, product_suggestions
 
 CATEGORIES = {"visit":"Termin", "vaccine":"Impfung", "exam":"Untersuchung", "lab":"Labor/Befund", "med":"Medikament", "worm":"Entwurmung", "weight":"Gewicht", "food":"Ernährung", "note":"Notiz", "reminder":"Erinnerung", "titer":"Tollwut-Antikörpertest", "parasite":"Parasitenbehandlung"}
@@ -83,6 +84,7 @@ def create_app(config=None):
         if "parent_id" not in {row["name"] for row in con.execute("PRAGMA table_info(records)")}:
             con.execute("ALTER TABLE records ADD COLUMN parent_id INTEGER REFERENCES records(id) ON DELETE CASCADE")
         con.execute("CREATE INDEX IF NOT EXISTS records_parent ON records(parent_id)")
+        con.execute("PRAGMA user_version=1")
         con.executemany("INSERT OR IGNORE INTO products(name) VALUES (?)",[(p,) for p in PRODUCTS])
         con.execute("INSERT OR IGNORE INTO app_settings VALUES ('session_secret',?)",(secrets.token_hex(32),))
         app.secret_key=con.execute("SELECT value FROM app_settings WHERE key='session_secret'").fetchone()[0]
@@ -135,6 +137,9 @@ def create_app(config=None):
 
     @app.before_request
     def auth():
+        # Override the ordinary 55 MiB upload cap for a validated ZIP restore only.
+        if request.endpoint=="backup_import":
+            request.max_content_length=MAX_ARCHIVE_BYTES+2*1024*1024
         if request.endpoint in ("health","static"):
             return
         if request.path.startswith("/api/"):
@@ -233,6 +238,66 @@ def create_app(config=None):
         with db() as con:
             token_active=con.execute("SELECT 1 FROM app_settings WHERE key='api_token_hash'").fetchone() is not None
         return page("settings",username=account()["username"],token_active=token_active,new_token=new_token)
+
+    def backup_error(message, status=400):
+        if "application/json" in request.headers.get("Accept", ""):
+            return jsonify(error=message),status
+        flash(message,"error")
+        return redirect(url_for("settings")+"#backups",303)
+
+    def authorized_backup():
+        password=request.form.get("current_password","")
+        user=account()
+        return bool(user and len(password)<=256 and check_password_hash(user["password_hash"],password))
+
+    @app.post("/settings/backups/export")
+    def backup_export():
+        if not authorized_backup():
+            return backup_error("Aktuelles Passwort ist falsch.",403)
+        try:
+            temporary, archive, counts=create_portable_backup(path,folder,Path(__file__).with_name("VERSION").read_text().strip())
+            # Stream from disk so large ZIPs do not need to be buffered by Flask.
+            # The finally clause also removes the temporary files on client disconnect.
+            def chunks():
+                try:
+                    with archive.open("rb") as stream:
+                        for block in iter(lambda: stream.read(1024*1024), b""):
+                            yield block
+                finally:
+                    temporary.cleanup()
+            response=app.response_class(chunks(),mimetype="application/zip")
+            response.headers["Content-Disposition"]='attachment; filename="'+archive.name+'"'
+            response.headers["Content-Length"]=str(archive.stat().st_size)
+            response.call_on_close(temporary.cleanup)
+            return response
+        except BackupError as error:
+            app.logger.warning("Portable backup rejected: %s",str(error))
+            return backup_error(str(error),400)
+        except Exception:
+            app.logger.exception("Portable backup export failed")
+            return backup_error("Das Backup konnte nicht erstellt werden. Bitte die Serverlogs prüfen.",500)
+
+    @app.post("/settings/backups/import")
+    def backup_import():
+        if not authorized_backup():
+            return backup_error("Aktuelles Passwort ist falsch.",403)
+        if request.form.get("confirm_text","")!="ERSETZEN" or request.form.get("confirm_overwrite")!="yes":
+            return backup_error("Bitte den Datenersatz mit ERSETZEN bestätigen.",400)
+        try:
+            counts,safety=restore_portable_backup(request.files.get("backup"),path,folder,PRODUCTS)
+            summary={"pets":counts["pets"],"records":counts["records"],
+                     "attachments":counts["attachments"],"pet_photos":counts["pet_photos"],
+                     "dose_checks":counts["dose_checks"]}
+            if "application/json" in request.headers.get("Accept",""):
+                return jsonify(ok=True,imported=summary,safety_backup=safety),200
+            flash(f"Import erfolgreich: {summary['pets']} Tiere, {summary['records']} Akteneinträge und {summary['attachments']} Anhänge. Sicherheitskopie: {safety}")
+            return redirect(url_for("settings")+"#backups",303)
+        except BackupError as error:
+            app.logger.warning("Portable backup import rejected: %s",str(error))
+            return backup_error(str(error),400)
+        except Exception:
+            app.logger.exception("Portable backup import failed")
+            return backup_error("Import fehlgeschlagen. Die Daten wurden nicht ersetzt; bitte die Serverlogs prüfen.",500)
 
     @app.after_request
     def headers(r):

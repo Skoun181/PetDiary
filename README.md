@@ -1,13 +1,13 @@
-# 🐾 PetDiary 0.0.4
+# 🐾 PetDiary 0.0.5
 
 **Self-hosted · Docker · SQLite · Home Assistant**
 
 
 Private, ressourcenschonende Tiergesundheitsakte für den eigenen Docker-Server. Keine Cloud, kein JavaScript-Framework, keine zusätzliche Datenbank. Deutschsprachige Weboberfläche in Mintgrün und Petrol, inspiriert von modernen Tiergesundheits-Apps.
 
-**Status:** Version 0.0.4 – Erinnerungsübersicht für 365 Tage. Aktuelle Veröffentlichungen unter [Releases](https://github.com/Skoun181/PetDiary/releases). Ein lokales Administratorkonto pro Installation; keine Mehrbenutzerverwaltung.
+**Status:** Version 0.0.5 – portabler ZIP-Export und sicherer Import für Serverumzüge. Aktuelle Veröffentlichungen und Versions-Tags unter [GitHub Releases](https://github.com/Skoun181/PetDiary/releases) und [Docker Hub](https://hub.docker.com/r/skoun181/petdiary/tags). Ein lokales Administratorkonto pro Installation; keine Mehrbenutzerverwaltung.
 
-[📖 Bebilderte Bedienungsanleitung](docs/USER_GUIDE.md) · [🏠 Home Assistant](docs/HOME_ASSISTANT.md) · [🔑 Passwort zurücksetzen](docs/PASSWORD_RESET.md) · [Änderungen](CHANGELOG.md)
+[📖 Bebilderte Bedienungsanleitung](docs/USER_GUIDE.md) · [🏠 Home Assistant](docs/HOME_ASSISTANT.md) · [📦 Backup und Umzug](docs/BACKUP_MIGRATION.md) · [🔑 Passwort zurücksetzen](docs/PASSWORD_RESET.md) · [Änderungen](CHANGELOG.md)
 
 ![Gesundheitsakte – schematische Illustration](docs/images/tierakte.svg)
 
@@ -22,6 +22,7 @@ Die Illustrationen zeigen fiktive Beispieldaten, keine live aufgenommenen Screen
 - Digitaler privater Impfpass, orientiert am EU-Heimtierausweis: Halter, Tierdaten, Kennzeichnung, Ausweisnummer, ausstellende Praxis sowie Impf- und Vorsorgehistorie
 - Erinnerungen für Termine und Impfungen, als erledigt markieren und wieder öffnen; Gültigkeitsende bei Impfungen als Standardfälligkeit
 - Lesende REST-API für Home Assistant, Beispielkonfiguration und Dashboard-Karte
+- Portables ZIP-Backup und -Import im Browser, inklusive Bilder/PDFs und automatischer interner Sicherheitskopie vor dem Import
 - Browser-Ersteinrichtung, lokale Anmeldung, eigener API-Token, CSRF-Schutz, persistent gespeicherte SQLite-Daten, Non-Root-Container, Healthcheck
 
 Der digitale Impfpass ist eine private Abschrift, keine amtliche Ausstellung und kein Ersatz für den Original-Heimtierausweis. Es werden keine medizinischen Impfintervalle berechnet und keine tierärztlichen Signaturen erzeugt. Weitere amtliche Sonderabschnitte sind noch nicht vollständig abgebildet. Es gibt noch keine Tierarztterminbuchung, Push-Nachrichten, einzelne Benutzerkonten.
@@ -45,11 +46,93 @@ GET /api/v1/medications?days=7 liefert geplante Gaben ab dem heutigen Tag (optio
 
 Der Katalog enthält 607 unterschiedliche Bezeichnungen (einschließlich vorhandener Präparatevarianten). Die bereitgestellten A–Z-Listen umfassen 343 Katzen- und 468 Hundeeinträge, zusammen 540 unterschiedliche Namen. 458 davon wurden neu ergänzt. Gemeinsame Handels- und Wirkstoffnamen werden nur einmal gespeichert. Die Vorschläge der Tierart erscheinen zuerst; Hinweise zeigen die Herkunftsliste und bewahren die Quellmarkierungen für Ergänzungs-/Pflegeprodukte, Humanarzneimittel bzw. mögliche Umwidmung und zu prüfende Varianten. Alle Einträge, auch unmarkierte, sind ungeprüft. Die Listen dienen ausschließlich der nachträglichen Dokumentation, nicht der Therapieauswahl. Freitext und bereits gespeicherte Namen sowie Pläne bleiben erhalten. Keine Dosierungen oder Indikationen aus den Listen übernommen. Permethrinhaltige Hundepräparate können für Katzen lebensgefährlich sein.
 
+## 📦 Backup erstellen, importieren und auf einen anderen Server umziehen (ab 0.0.5)
+
+PetDiary kann die vollständige Tiergesundheitsakte direkt über den Browser als **portable ZIP-Datei** sichern und in einer neuen PetDiary-Instanz wiederherstellen – zum Beispiel bei einem Wechsel von Dockhand auf einen anderen Docker-Host oder in einen frischen LXC-Container. Die Funktion steht ab **Version 0.0.5** unter **Einstellungen → Daten sichern und umziehen** zur Verfügung.
+
+### Was wird exportiert und importiert?
+
+| Bestandteil | Im ZIP enthalten? | Nach dem Import |
+| --- | :---: | --- |
+| Tierprofile, Rasse, Kennzeichnung, Impfpass und Halterangaben | ✅ | Vollständig übernommen |
+| Tierarztbesuche, Impfungen, Untersuchungen, Erinnerungen und Notizen | ✅ | Vollständig übernommen |
+| Medikamente, Einzelgaben, dokumentierte Mengen, individuelle Pläne und Abhakstatus | ✅ | Vollständig übernommen |
+| Profilbilder, angehängte Bilder und PDF-Dokumente | ✅ | Vollständig übernommen |
+| Eigene Präparatenamen und gespeicherter Präparatekatalog | ✅ | Übernommen und mit dem aktuellen Grundkatalog ergänzt |
+| Exportdatum (UTC), App-/Schema-Version, Tabellenanzahlen und SHA-256-Prüfsumme | ✅ | Zur Validierung genutzt |
+| Admin-Benutzername, Konto und Passwort-Hash | ❌ | **Zugangsdaten der Zielinstanz bleiben erhalten** |
+| Home-Assistant-API-Token und gespeicherter Token-Hash | ❌ | **Token der Zielinstanz bleibt erhalten** |
+| Sitzungsschlüssel, Cookies und sonstige App-Secrets | ❌ | **Sitzungsschlüssel der Zielinstanz bleibt erhalten** |
+| Docker-Image, Container, Docker-Volume oder Compose-Datei | ❌ | Separat auf dem neuen Server einrichten |
+| Host-Port, Firewall, HTTPS-Proxy, .env und andere Servereinstellungen | ❌ | Bei Bedarf separat übernehmen oder neu einrichten |
+
+**Gut zu wissen:** PetDiary speichert sämtliche hochgeladenen Dateien bereits in SQLite. Die ZIP-Datei enthält `petdiary.sqlite3` (bereinigte, konsistente Kopie inklusive Bilder/PDFs) und `manifest.json` (Metadaten/Prüfsumme). Es wird kein zweiter Dateiordner benötigt. Der Export enthält **keine** Zugangsdaten der Quellinstanz, aber weiterhin persönliche Tier- und Halterdaten. Bewahre ihn geschützt auf.
+
+### Schritt 1 – Daten in PetDiary exportieren
+
+1. Melde dich in der **Quellinstanz** an (ab 0.0.5).
+2. Gehe zu **Einstellungen → Daten sichern und umziehen → Daten exportieren**.
+3. Gib dein **aktuelles Admin-Passwort** ein.
+4. Klicke auf **ZIP-Backup herunterladen**. Währenddessen erscheint eine Statusmeldung.
+5. Speichere die heruntergeladene Datei sicher, beispielsweise `petdiary-backup-2026-11-20-231200.zip`. Bewahre mindestens eine zusätzliche Kopie außerhalb des Servers auf.
+6. **Wichtig bei Dockhand:** Wird eine Datei als `*.zip.tar` heruntergeladen, entpacke **nur das äußere TAR**. Importiere die darin enthaltene unveränderte `*.zip`-Datei.
+
+Der Export nutzt die SQLite-Online-Backup-API, sodass kein laufender Container gestoppt werden muss. Die Größe ist auf **256 MiB ZIP** und **1 GiB entpackte SQLite-Datenbank** begrenzt. Für temporäre Dateien benötigt `/data` ausreichend freien Speicherplatz.
+
+### Schritt 2 – Neue Instanz vorbereiten
+
+Auf dem neuen Rechner Docker/Compose bzw. Dockhand bereitstellen. Für einen **neuen** Stack kannst du die [Docker-Hub-Compose-Vorlage](deploy/compose.yaml) verwenden. Beispielsweise:
+
+~~~yaml
+services:
+  petdiary:
+    image: skoun181/petdiary:0.0.5
+    container_name: petdiary
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - petdiary-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    init: true
+volumes:
+  petdiary-data:
+~~~
+
+Speichere und deploye den Stack in Dockhand oder führe im Compose-Verzeichnis `docker compose up -d` aus. Öffne `http://NEUER-SERVER:8080` (oder deine HTTPS-Adresse) und lege auf der **neuen Instanz zuerst ein eigenes Admin-Konto** an. Der neue Container besitzt ein **eigenes** Volume. **Nicht** dasselbe produktive SQLite-Volume gleichzeitig in zwei schreibenden Containern einhängen.
+
+### Schritt 3 – ZIP importieren
+
+1. Melde dich auf der **Zielinstanz** an und öffne **Einstellungen → Daten sichern und umziehen → Backup importieren**.
+2. Wähle das unveränderte `petdiary-backup-....zip` aus – **nicht** `.zip.tar`, die rohe `.sqlite3` oder ein Docker-Exportarchiv.
+3. Gib das aktuelle **Passwort der Zielinstanz** ein.
+4. Tippe zur Bestätigung exakt **ERSETZEN** und aktiviere das Kontrollkästchen.
+5. Klicke auf **Backup importieren und Daten ersetzen**. Die Anwendung prüft Datei und Prüfsumme, SQLite-Integrität, Schema-Version und Fremdschlüssel, **bevor** sie Anwendungsdaten ändert.
+6. Vor dem Überschreiben legt PetDiary automatisch eine interne vollständige Sicherheitskopie der bisherigen **Zieldatenbank** unter `/data/.petdiary-safety-backups/` an. Diese internen Notfallkopien enthalten bewusst die **alten Zugangsdaten der Zielinstanz** und sind **kein** portables Export-ZIP.
+7. Nach erfolgreichem Import erscheinen eine Rückmeldung mit Anzahl der Tiere, Akteneinträge, Anhänge und Profilbilder sowie der Dateiname der Sicherheitskopie. Ein Containerneustart ist dafür nicht nötig.
+
+**Achtung: Der Import ersetzt sämtliche vorhandenen Tier- und Gesundheitsdaten der Zielinstanz.** Er fügt nicht einfach Tiere hinzu. Wird der Vorgang während der Datenübernahme fehlerhaft, bleibt der bisherige Datenbestand dank SQLite-Transaktion erhalten. Das Admin-Konto und der Home-Assistant-Token **der Zielinstanz** werden nicht ersetzt.
+
+### Schritt 4 – Umzug überprüfen
+
+Prüfe nach dem Import die Tierprofile, Akteneinträge, Bilder/PDFs, Erinnerungen und den Medikamentenkalender. Kontrolliere bei Bedarf `http://NEUER-SERVER:8080/healthz`. Wenn sich Serveradresse oder Port geändert haben, passe Home Assistant, Reverse Proxy und Firewall an. Schalte den alten Server **erst nach erfolgreicher Kontrolle und einer zusätzlichen Sicherung** ab.
+
+Für **bestehende Dockhand-Installationen**, die nur auf ein neues Image aktualisieren: **bestehendes Datenvolume beibehalten** und vorher ein Backup machen. Beim Aktualisieren per `docker compose pull && docker compose up -d` bleiben Daten im Volume erhalten. Niemals `docker compose down -v` zum Aktualisieren verwenden.
+
+**Ältere Version 0.0.4:** Dort fehlt der Exportknopf noch. Für den einmaligen Umzug erklärt die [ausführliche Migrationsanleitung](docs/BACKUP_MIGRATION.md) das Erstellen eines SQLite-Online-Snapshots mit anschließender Umwandlung ins bereinigte PetDiary-ZIP.
+
+**[Ausführliche Anleitung: Dockhand, bisherige 0.0.4, LXC, Notfall-Restore und technische Grenzen](docs/BACKUP_MIGRATION.md)**
+
+
 ## Installation
 
 Voraussetzungen: Docker Engine, Docker Compose v2 bei Compose-Installationen, freier Port 8080. Kein externer Datenbankdienst und keine Pflicht-.env. Die Erstkonfiguration erfolgt im Browser. Der Quellcode ist öffentlich.
 
-### A. Aus dem Git-Repository installieren (sofort verfügbar)
+### A. Aus dem Git-Repository installieren
 
 Mit GitHub CLI, auch bei Anmeldung über Google:
 
@@ -72,7 +155,7 @@ Die mitgelieferte [compose.yaml](compose.yaml) baut das Image lokal. Sie verwend
 
 ### B. Nur Docker Compose YAML (Docker Hub)
 
-**Docker Hub:** Das Image wird automatisch gebaut. Aktuelle Tags: [Docker Hub](https://hub.docker.com/r/skoun181/petdiary/tags). Bei einem privaten Paket benötigst du einen Docker-Hub-Token mit Leserechten.
+**Docker Hub:** Die Backup- und Importfunktionen sind ab dem Image-Tag `0.0.5` enthalten. Aktuelle Tags: [Docker Hub](https://hub.docker.com/r/skoun181/petdiary/tags). Bei einem privaten Paket benötigst du einen Docker-Hub-Token mit Leserechten.
 
 Erstelle eine Datei `docker-compose.yaml` mit dem Inhalt der [Stack-Vorlage](deploy/compose.yaml):
 
