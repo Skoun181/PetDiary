@@ -84,6 +84,7 @@ def create_app(config=None):
         if "parent_id" not in {row["name"] for row in con.execute("PRAGMA table_info(records)")}:
             con.execute("ALTER TABLE records ADD COLUMN parent_id INTEGER REFERENCES records(id) ON DELETE CASCADE")
         con.execute("CREATE INDEX IF NOT EXISTS records_parent ON records(parent_id)")
+        con.execute("PRAGMA user_version=1")
         con.executemany("INSERT OR IGNORE INTO products(name) VALUES (?)",[(p,) for p in PRODUCTS])
         con.execute("INSERT OR IGNORE INTO app_settings VALUES ('session_secret',?)",(secrets.token_hex(32),))
         app.secret_key=con.execute("SELECT value FROM app_settings WHERE key='session_secret'").fetchone()[0]
