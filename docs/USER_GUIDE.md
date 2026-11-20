@@ -1,4 +1,4 @@
-# PetDiary 0.0.4 – Bedienungsanleitung
+# PetDiary 0.0.5 – Bedienungsanleitung
 
 [Zurück zur README](../README.md) · [Passwort zurücksetzen](PASSWORD_RESET.md)
 
@@ -123,8 +123,8 @@ Wenn du das Passwort vergessen hast: [Passwort zurücksetzen](PASSWORD_RESET.md)
 
 Zur Datensicherung, Wiederherstellung, Aktualisierung und Fehlersuche siehe [README](../README.md). Der derzeitige Stand ist eine Vorabversion, nicht medizinisch validierte Software. Kein Live-Docker-/Browser-Test oder Performancebenchmark ist dokumentiert.
 
-## Datenexport und Wiederherstellung (Entwicklung 0.0.5)
+## Datenexport und Wiederherstellung (ab 0.0.5)
 
 Unter **Einstellungen → Daten sichern und umziehen** lässt sich ein portables ZIP mit allen Tier- und Gesundheitsdaten sowie Bildern/PDFs erstellen. Ein Admin-Passwort ist erforderlich; das ZIP enthält keine Admin-Konten, Passwort-Hashes, API-Token oder Session-Geheimnisse. Im selben Bereich können ZIP-Dateien geprüft und nach ausdrücklicher Bestätigung importiert werden. Der Import ersetzt die vorhandenen **Tierdaten** und legt vorher eine interne Sicherheitskopie der Ziel-Datenbank an. Die Zugangsdaten der Zielinstanz bleiben erhalten.
 
-**Die Funktion ist bislang nur im develop-Branch verfügbar.** [Vollständige Anleitung für Backups, den Dockhand-Entwicklungscontainer, die bisherige Version 0.0.4 und Serverumzüge](BACKUP_MIGRATION.md).
+**Ab 0.0.5 auch in Stable verfügbar:** [Vollständige Schritt-für-Schritt-Anleitung für den Export, Import, Dockhand, alte 0.0.4-Installationen und Serverumzüge](BACKUP_MIGRATION.md). Beim Umzug müssen Image, Compose-Datei, Portfreigaben und das neue Volume separat vorbereitet werden; die ZIP enthält die Anwendungsdaten, nicht die Serverkonfiguration.
