@@ -1,0 +1,42 @@
+# In configuration.yaml übernehmen; vorhandenen rest:-Abschnitt zusammenführen.
+rest:
+  - resource: !secret petdiary_url
+    headers:
+      Authorization: !secret petdiary_authorization
+    scan_interval: 300
+    timeout: 10
+    sensor:
+      - name: "PetDiary Erinnerungen"
+        unique_id: petdiary_reminders
+        value_template: "{{ value_json.count }}"
+        json_attributes:
+          - reminders
+          - next
+          - overdue
+          - due_today
+          - as_of
+        icon: mdi:paw
+      - name: "PetDiary Überfällig"
+        unique_id: petdiary_overdue
+        value_template: "{{ value_json.overdue }}"
+        icon: mdi:calendar-alert
+
+  - resource: !secret petdiary_medication_url
+    headers:
+      Authorization: !secret petdiary_authorization
+    scan_interval: 60
+    timeout: 10
+    sensor:
+      - name: "PetDiary Medikamente heute"
+        unique_id: petdiary_medications_today
+        value_template: "{{ value_json.count }}"
+        json_attributes:
+          - medications
+          - next
+          - due_count
+          - timezone
+        icon: mdi:pill
+      - name: "PetDiary Medikamente fällig"
+        unique_id: petdiary_medications_due
+        value_template: "{{ value_json.due_count }}"
+        icon: mdi:clock-alert-outline

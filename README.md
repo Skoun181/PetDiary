@@ -7,7 +7,7 @@ Private, ressourcenschonende Tiergesundheitsakte für den eigenen Docker-Server.
 
 **Status:** Version 0.0.4 – Erinnerungsübersicht für 365 Tage. Aktuelle Veröffentlichungen unter [Releases](https://github.com/Skoun181/PetDiary/releases). Ein lokales Administratorkonto pro Installation; keine Mehrbenutzerverwaltung.
 
-[📖 Bebilderte Bedienungsanleitung](docs/USER_GUIDE.md) · [🔑 Passwort zurücksetzen](docs/PASSWORD_RESET.md) · [Änderungen](CHANGELOG.md)
+[📖 Bebilderte Bedienungsanleitung](docs/USER_GUIDE.md) · [🏠 Home Assistant](docs/HOME_ASSISTANT.md) · [🔑 Passwort zurücksetzen](docs/PASSWORD_RESET.md) · [Änderungen](CHANGELOG.md)
 
 ![Gesundheitsakte – schematische Illustration](docs/images/tierakte.svg)
 
@@ -167,25 +167,46 @@ Das neue Passwort zweimal verdeckt eingeben. Alle Daten und der API-Token bleibe
 
 ## Home Assistant
 
-API: GET /api/v1/reminders?days=365. Bearer-Token unter Einstellungen erzeugen; er wird nur direkt nach der Erstellung angezeigt. Ein neuer Token widerruft den alten. Standard ohne days: 365 Tage; days ist weiterhin frei wählbar von 0 bis 3650. Bestehende Home-Assistant-Installationen mit days=30 müssen petdiary_url in secrets.yaml auf days=365 umstellen und Home Assistant neu starten. Überfällige nicht erledigte Einträge sind immer im Ergebnis enthalten. next ist die früheste offene Erinnerung unabhängig vom Fenster. dates sind ISO-8601; days_left ist negativ bei Überfälligkeit.
+PetDiary besitzt eine integrierte lesende REST-API. Keine HACS-Erweiterung erforderlich. Die Dashboard-Karte zeigt nicht nur die Anzahl, sondern auch konkrete Erinnerungen mit Tiername, Datum und verbleibenden Tagen sowie Medikamentenname, Menge, Uhrzeit und Gabenstatus.
 
-```sh
-curl -H "Authorization: Bearer DEIN_API_TOKEN" \
-  "http://127.0.0.1:8080/api/v1/reminders?days=365"
+![Home Assistant – Dashboard-Vorschau im dunklen Design](docs/images/home-assistant.svg)
+
+*Anonymisierte schematische Vorschau nach einem eingerichteten Dashboard.*
+
+**[Ausführliche Schritt-für-Schritt-Anleitung mit vollständiger YAML](docs/HOME_ASSISTANT.md)**
+
+### Schnellstart
+
+1. In PetDiary unter **Einstellungen → Home Assistant** einen API-Token erstellen bzw. einen vorhandenen funktionierenden Token verwenden. Neue Tokens widerrufen den alten.
+2. In der bestehenden HA-Datei `secrets.yaml` ergänzen:
+
+```yaml
+petdiary_url: "http://PETDIARY-SERVER:8080/api/v1/reminders?days=365"
+petdiary_medication_url: "http://PETDIARY-SERVER:8080/api/v1/medications?days=1"
+petdiary_authorization: "Bearer DEIN_API_TOKEN"
 ```
 
-Antwort (Beispieldaten):
+3. Serveradresse, ggf. Host-Port und Token ersetzen. HTTPS bevorzugen. Home Assistant muss den Zielport erreichen können (Firewall-Freigabe bei getrennten Netzen).
+4. [Kombinierte REST-Konfiguration](examples/home-assistant-rest.yaml) in `configuration.yaml` übernehmen und mit einem eventuell vorhandenen `rest:`-Abschnitt zusammenführen. Bestehende Sensoren und andere Integrationen bleiben erhalten.
+5. Unter **Entwicklerwerkzeuge → YAML** prüfen, Home Assistant neu starten und unter **Zustände** die vier Sensoren kontrollieren.
+6. Im Dashboard **Bearbeiten → Karte hinzufügen → Manuell** wählen und die [fertige Dashboard-YAML](examples/home-assistant-card.yaml) einfügen. Entity-IDs bei Bedarf und URL in der letzten Zeile anpassen.
 
-```json
-{"count":1,"overdue":0,"due_today":0,"as_of":"2026-11-19","next":{"id":1,"pet_id":1,"pet":"Milo","kind":"vaccine","title":"Tollwut","due":"2026-11-26","days_left":7},"reminders":[{"id":1,"pet_id":1,"pet":"Milo","kind":"vaccine","title":"Tollwut","due":"2026-11-26","days_left":7}]}
-```
+| Sensor | Inhalt |
+| --- | --- |
+| sensor.petdiary_erinnerungen | Offene Erinnerungen für 365 Tage inkl. überfälliger, Attribut reminders |
+| sensor.petdiary_uberfallig | Überfällige Erinnerungen |
+| sensor.petdiary_medikamente_heute | Offene Gaben heute, Attribut medications mit Details |
+| sensor.petdiary_medikamente_fallig | Fällige offene Gaben heute |
 
-1. `examples/home-assistant.yaml` in die HA-Konfiguration übernehmen.
-2. In HA secrets.yaml die erreichbare URL und den vollständigen Bearer-Header eintragen. HTTPS-URL oder bewusst freigegebenen LAN-Endpunkt verwenden.
-3. Konfiguration prüfen und HA neu laden bzw. neu starten.
-4. `examples/home-assistant-card.yaml` als manuelle Karte hinzufügen. Entity-ID gegebenenfalls anpassen.
+Bei vorhandenen Installationen `days=30` in `secrets.yaml` auf `days=365` ändern und HA neu starten. Ein Sensorwert 0 bedeutet, dass keine entsprechenden offenen Einträge vorliegen. Leere Werte oder Nicht verfügbar erfordern eine Prüfung der API, Firewall und Protokolle (siehe Anleitung).
 
-Home Assistant kann die Sensoren für eigene Automationen nutzen. PetDiary selbst verschickt keine Nachrichten. Fälligkeiten sind Kalendertage in TZ, standardmäßig Europe/Berlin.
+### API
+
+- GET /api/v1/reminders?days=365 – Standard 365, frei wählbar 0–3650, offene überfällige Erinnerungen immer enthalten. next ist die früheste offene Erinnerung unabhängig vom Fenster. days_left ist negativ bei Überfälligkeit.
+- GET /api/v1/medications?days=1 – Tagesplan; days 1–31, optional start=YYYY-MM-DD. Ohne feste Uhrzeit: time leer, scheduled_at null.
+- Beide Endpunkte: Authorization: Bearer DEIN_API_TOKEN. Zeitzone standardmäßig Europe/Berlin.
+
+Home Assistant kann eigene Benachrichtigungs-Automationen nutzen. PetDiary verschickt keine Push-Nachrichten; die API bleibt lesend, tatsächliche Gaben werden in PetDiary dokumentiert. Bei medizinisch kritischen Gaben nicht allein auf Polling vertrauen.
 
 ## Architektur, Backup, Betrieb
 

@@ -1,15 +1,88 @@
-# Manuelle Markdown-Karte im Dashboard. Entity-ID ggf. anpassen.
-type: markdown
-title: 🐾 PetDiary
-content: >
-  {% set rows = state_attr('sensor.petdiary_erinnerungen','reminders') %}
-  {% if rows is none %}
-  PetDiary derzeit nicht verfügbar.
-  {% elif not rows %}
-  Keine offenen Erinnerungen in den nächsten 365 Tagen.
-  {% else %}
-  {% for r in rows %}
-  - **{{ r.pet }}:** {{ r.title }} – {{ r.due }}
-    {% if r.days_left < 0 %}(überfällig){% elif r.days_left == 0 %}(heute){% else %}(in {{ r.days_left }} Tagen){% endif %}
-  {% endfor %}
-  {% endif %}
+# Als manuelle Dashboard-Karte einfügen. Entity-IDs und URL anpassen.
+type: vertical-stack
+cards:
+  - type: grid
+    columns: 2
+    square: false
+    cards:
+      - type: tile
+        entity: sensor.petdiary_erinnerungen
+        name: Erinnerungen
+        icon: mdi:paw
+        color: primary
+      - type: tile
+        entity: sensor.petdiary_uberfallig
+        name: Überfällig
+        color: red
+      - type: tile
+        entity: sensor.petdiary_medikamente_heute
+        name: Medikamente heute
+        color: green
+      - type: tile
+        entity: sensor.petdiary_medikamente_fallig
+        name: Medikamente fällig
+        color: orange
+  - type: markdown
+    title: 📅 Kommende Erinnerungen
+    content: |
+      {% set rows = state_attr('sensor.petdiary_erinnerungen', 'reminders') %}
+      {% if rows is none or not has_value('sensor.petdiary_erinnerungen') %}
+      ⚠️ PetDiary ist derzeit nicht verfügbar.
+      {% elif not rows %}
+      ✅ Keine offenen Erinnerungen.
+      {% else %}
+      {% for r in rows %}
+      ### {{ r.title }}
+
+      🐾 **Tier:** {{ r.pet }}
+
+      📅 **Datum:** {{ as_timestamp(r.due) | timestamp_custom('%d.%m.%Y') }}
+
+      {% if r.days_left < 0 %}
+      🔴 Seit {{ r.days_left | abs }} Tagen überfällig
+      {% elif r.days_left == 0 %}
+      🟠 Heute fällig
+      {% elif r.days_left <= 7 %}
+      🟡 In {{ r.days_left }} Tagen
+      {% else %}
+      🟢 In {{ r.days_left }} Tagen
+      {% endif %}
+
+      ---
+      {% endfor %}
+      {% endif %}
+  - type: markdown
+    title: 💊 Medikamentenplan heute
+    content: |
+      {% set rows = state_attr('sensor.petdiary_medikamente_heute', 'medications') %}
+      {% if rows is none or not has_value('sensor.petdiary_medikamente_heute') %}
+      ⚠️ PetDiary ist derzeit nicht verfügbar.
+      {% elif not rows %}
+      ✅ Keine Medikamente für heute geplant.
+      {% else %}
+      {% for m in rows %}
+      ### {{ m.product }}
+
+      🐾 **Tier:** {{ m.pet }}
+
+      💊 **Menge:** {{ m.dose }} {{ m.unit }}
+
+      🕒 **Uhrzeit:** {{ m.time or 'Keine feste Uhrzeit' }}
+
+      {% if m.done %}
+      ✅ Bereits verabreicht
+      {% elif m.scheduled_at and as_timestamp(m.scheduled_at, 0) > as_timestamp(now()) %}
+      🔵 Einnahme geplant
+      {% else %}
+      🟠 Noch ausstehend – fällig
+      {% endif %}
+
+      ---
+      {% endfor %}
+      {% endif %}
+  - type: button
+    name: PetDiary öffnen
+    icon: mdi:paw
+    tap_action:
+      action: url
+      url_path: http://PETDIARY-SERVER:8080
