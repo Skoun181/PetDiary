@@ -1,13 +1,13 @@
-# 🐾 PetDiary 0.0.4
+# 🐾 PetDiary 0.0.5 – Entwicklung
 
 **Self-hosted · Docker · SQLite · Home Assistant**
 
 
 Private, ressourcenschonende Tiergesundheitsakte für den eigenen Docker-Server. Keine Cloud, kein JavaScript-Framework, keine zusätzliche Datenbank. Deutschsprachige Weboberfläche in Mintgrün und Petrol, inspiriert von modernen Tiergesundheits-Apps.
 
-**Status:** Version 0.0.4 – Erinnerungsübersicht für 365 Tage. Aktuelle Veröffentlichungen unter [Releases](https://github.com/Skoun181/PetDiary/releases). Ein lokales Administratorkonto pro Installation; keine Mehrbenutzerverwaltung.
+**Status:** Version 0.0.5 ist ein noch nicht veröffentlichter Entwicklungsstand auf `develop`. Docker Hub `latest` und `stable` bleiben bei der letzten freigegebenen Version. Die neue Browser-Backupfunktion muss aus `develop` gebaut werden. Aktuelle Veröffentlichungen unter [Releases](https://github.com/Skoun181/PetDiary/releases). Ein lokales Administratorkonto pro Installation; keine Mehrbenutzerverwaltung.
 
-[📖 Bebilderte Bedienungsanleitung](docs/USER_GUIDE.md) · [🏠 Home Assistant](docs/HOME_ASSISTANT.md) · [🔑 Passwort zurücksetzen](docs/PASSWORD_RESET.md) · [Änderungen](CHANGELOG.md)
+[📖 Bebilderte Bedienungsanleitung](docs/USER_GUIDE.md) · [🏠 Home Assistant](docs/HOME_ASSISTANT.md) · [📦 Backup und Umzug](docs/BACKUP_MIGRATION.md) · [🔑 Passwort zurücksetzen](docs/PASSWORD_RESET.md) · [Änderungen](CHANGELOG.md)
 
 ![Gesundheitsakte – schematische Illustration](docs/images/tierakte.svg)
 
@@ -45,11 +45,23 @@ GET /api/v1/medications?days=7 liefert geplante Gaben ab dem heutigen Tag (optio
 
 Der Katalog enthält 607 unterschiedliche Bezeichnungen (einschließlich vorhandener Präparatevarianten). Die bereitgestellten A–Z-Listen umfassen 343 Katzen- und 468 Hundeeinträge, zusammen 540 unterschiedliche Namen. 458 davon wurden neu ergänzt. Gemeinsame Handels- und Wirkstoffnamen werden nur einmal gespeichert. Die Vorschläge der Tierart erscheinen zuerst; Hinweise zeigen die Herkunftsliste und bewahren die Quellmarkierungen für Ergänzungs-/Pflegeprodukte, Humanarzneimittel bzw. mögliche Umwidmung und zu prüfende Varianten. Alle Einträge, auch unmarkierte, sind ungeprüft. Die Listen dienen ausschließlich der nachträglichen Dokumentation, nicht der Therapieauswahl. Freitext und bereits gespeicherte Namen sowie Pläne bleiben erhalten. Keine Dosierungen oder Indikationen aus den Listen übernommen. Permethrinhaltige Hundepräparate können für Katzen lebensgefährlich sein.
 
+## Portabler Datenexport und Import (develop / 0.0.5)
+
+Im Menü **Einstellungen → Daten sichern und umziehen** kannst du alle Tierprofile, Gesundheitsakten, Impfungen, Medikamentenpläne, Erledigt-Häkchen, Fotos, PDF-Anhänge und eigene Produkte in eine einzige **ZIP-Datei** sichern. Der Export verwendet die native SQLite-Online-Backup-API und enthält eine Version, ein Schemaformat und eine SHA-256-Prüfsumme. **Admin-Konten, Passwort-Hashes, Session-Geheimnisse und API-Tokens werden ausdrücklich ausgeschlossen.**
+
+Der Import kontrolliert ZIP-Struktur, Maximalgrößen (256 MiB ZIP, 1 GiB SQLite), Prüfsumme, Schema, SQLite-Integrität und Fremdschlüssel, legt vor dem Datenersatz automatisch eine interne Sicherheitskopie an und ersetzt nur Anwendungsdaten atomar. Das Admin-Konto und der API-Token der Zielinstanz bleiben bestehen. Import erfordert Anmeldung, aktuelles Passwort und die ausdrückliche Bestätigung **ERSETZEN**. ZIP-Dateien enthalten persönliche Gesundheits-/Halterdaten und sollten sicher gespeichert werden.
+
+**[Schritt-für-Schritt-Anleitung für Docker-/Dockhand-Umzug, develop-Testinstanz, alte Version 0.0.4 und Notfall-Restore](docs/BACKUP_MIGRATION.md)**
+
+### Develop sicher neben stable testen
+
+Der neue Branch wurde **nicht** nach stable gemergt und ist noch nicht auf Docker Hub veröffentlicht. In Dockhand einen separaten Git-Stack mit Repository `https://github.com/Skoun181/PetDiary.git`, Branch `develop` und Compose-Datei `compose.develop.yaml` anlegen, **Build images on deploy** aktivieren. Die Testinstanz läuft auf Port **8081** und verwendet das unabhängige Volume `petdiary-develop-data`. Die bestehende produktive Instanz bleibt auf Port 8080 unverändert. Für den Datenübertrag aus der alten stable-Version enthält die Anleitung einen einmaligen sicheren SQLite-Export mit Konvertierung in das portable ZIP.
+
 ## Installation
 
 Voraussetzungen: Docker Engine, Docker Compose v2 bei Compose-Installationen, freier Port 8080. Kein externer Datenbankdienst und keine Pflicht-.env. Die Erstkonfiguration erfolgt im Browser. Der Quellcode ist öffentlich.
 
-### A. Aus dem Git-Repository installieren (sofort verfügbar)
+### A. Aus dem Git-Repository installieren (stable-Stand)
 
 Mit GitHub CLI, auch bei Anmeldung über Google:
 
@@ -72,7 +84,7 @@ Die mitgelieferte [compose.yaml](compose.yaml) baut das Image lokal. Sie verwend
 
 ### B. Nur Docker Compose YAML (Docker Hub)
 
-**Docker Hub:** Das Image wird automatisch gebaut. Aktuelle Tags: [Docker Hub](https://hub.docker.com/r/skoun181/petdiary/tags). Bei einem privaten Paket benötigst du einen Docker-Hub-Token mit Leserechten.
+**Docker Hub:** Das Image enthält aktuell die stabile Version, nicht die neuen Backupfunktionen in develop. Aktuelle Tags: [Docker Hub](https://hub.docker.com/r/skoun181/petdiary/tags). Bei einem privaten Paket benötigst du einen Docker-Hub-Token mit Leserechten.
 
 Erstelle eine Datei `docker-compose.yaml` mit dem Inhalt der [Stack-Vorlage](deploy/compose.yaml):
 
