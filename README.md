@@ -228,6 +228,55 @@ Alternativ Methode A nur bis zum lokalen Build ausführen und einen manuellen St
 
 Offizielle Anleitung: [Dockhand – Compose stacks](https://dockhand.pro/manual/).
 
+### Develop – GitHub Container Registry (GHCR) in Dockhand
+
+Der separate Workflow [Publish Develop to GHCR](https://github.com/Skoun181/PetDiary/actions/workflows/develop-publish.yml) baut bei Pushes auf den Branch `develop` nach erfolgreichen Python-Tests und Container-Starttests Images für AMD64 und ARM64. Der bestehende Stable-Release auf Docker Hub und dessen Tags bleiben unverändert. Develop ist eine Testversion, keine neue Stable-Freigabe.
+
+1. Unter GitHub Actions prüfen, dass der neueste Publish-Workflow erfolgreich abgeschlossen ist.
+2. In Dockhand unter Settings → Registries eine GHCR-Registry (`https://ghcr.io`) mit GitHub-Benutzername und Personal Access Token (classic) mit `read:packages` einrichten oder die vorhandene GitHub-Registry wiederverwenden. Der Benutzer muss Zugriff auf das Package haben. Neu angelegte GHCR-Packages sind standardmäßig privat.
+3. Unter Images → Pull Image den Ziel-Docker-Host und die GHCR-Registry auswählen. Image: `skoun181/petdiary`, Tag: `develop`. Dockhand ergänzt `ghcr.io/` selbst; nicht doppelt eingeben.
+4. Unter Stacks → Create stack einen separaten Stack `petdiary-develop` erstellen und die [GHCR-Compose-Vorlage](deploy/compose.develop.yaml) einfügen:
+
+~~~yaml
+# GHCR development preview; separate from the stable deployment.
+name: petdiary-develop
+services:
+  petdiary:
+    image: ghcr.io/skoun181/petdiary:develop
+    container_name: petdiary-develop
+    restart: unless-stopped
+    ports:
+      - "8081:8080"
+    volumes:
+      - petdiary-develop-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    init: true
+volumes:
+  petdiary-develop-data:
+    name: petdiary-develop-data
+~~~
+
+5. Stack deployen. Bei einem bereits belegten Host-Port `8081` den linken Port ändern; der Container-Port bleibt `8080`. Keine ENV-Zugangsdaten, kein JWT_SECRET erforderlich.
+6. `http://SERVER-IP:8081` im vertrauenswürdigen Netz öffnen und ein eigenes lokales Administratorkonto einrichten (Passwort mindestens zwölf Zeichen). Erst danach ggf. per HTTPS-Reverse-Proxy erreichbar machen.
+7. Optional aus Stable ab 0.0.5 unter Einstellungen → Daten sichern und umziehen eine ZIP-Sicherung exportieren und auf Develop importieren. Das Zielkonto und dessen Home-Assistant-Token bleiben erhalten. Das produktive Volume niemals in der Develop-Instanz einhängen.
+
+Für spätere Develop-Updates das Image erneut pullen und den Stack mit unverändertem Develop-Volume neu deployen. `develop` ist ein beweglicher Tag; ein erfolgreich veröffentlichter Commit kann auch über `sha-<vollständiger Commit-SHA>` gepinnt werden. Kein `docker compose down -v` ausführen.
+
+Alternativ im Terminal:
+
+~~~sh
+docker login ghcr.io -u DEIN_GITHUB_USERNAME
+docker pull ghcr.io/skoun181/petdiary:develop
+~~~
+
+Bei `manifest unknown` oder `not found` zunächst den Publish-Workflow, den Image-Pfad und den Package-Zugriff prüfen.
+
 ### F. Erststart für alle Installationsmethoden
 
 Öffne `http://SERVER-IP:8080` (bei einem Reverse Proxy entsprechend die HTTPS-Adresse). Lege das lokale Administratorkonto an; Passwort mindestens 12 Zeichen. Anschließend ist die Ersteinrichtung gesperrt und es erscheint die reguläre Login-Seite. Unter Einstellungen verwaltest du dein Konto und den HA-API-Token.
