@@ -45,8 +45,6 @@ jobs:
           for arch in amd64 arm64; do
             docker buildx build --platform "linux/$arch" --load \
               --label "org.opencontainers.image.revision=$GITHUB_SHA" \
-              --cache-from "type=gha,scope=petdiary-develop-$arch" \
-              --cache-to "type=gha,mode=max,scope=petdiary-develop-$arch" \
               -t "$IMAGE:sha-$GITHUB_SHA-$arch" .
             docker volume create petdiary-ghcr-smoke-data
             docker run -d --platform "linux/$arch" --name petdiary-ghcr-smoke \
