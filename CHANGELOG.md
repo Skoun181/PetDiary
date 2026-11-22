@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.6 – Kosten, Gesundheitsakte als PDF und Dark Mode
+
+- Kostenverwaltung je Tier mit Kategorien, Jahresfilter, Erstattungen, Eigenanteil, Diagrammbalken und optionaler Verknüpfung zu Akteneinträgen/Rechnungsanhängen.
+- Lokal generiertes PDF der Gesundheitsakte pro Tier; Anhänge namentlich aufgeführt, keine eingebetteten Dateien.
+- Hell/Dunkel/System, browserlokal gespeichert.
+- SQLite-Schema 3: mehrere Aktenverknüpfungen pro Kosteneintrag, einmalige Betragszählung, Migration bestehender Einzelverknüpfungen; Backup und Import einschließlich aller Verknüpfungen; ältere Schema-1/2-ZIPs bleiben importierbar.
+
 ## 0.0.5 – Portables Backup, Import und Serverumzug
 
 - ZIP-Export über Einstellungen mit SQLite Online-Backup, Metadaten, Prüfsumme und vollständigen Bildern/PDFs.

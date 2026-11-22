@@ -21,14 +21,17 @@ from pathlib import Path
 LOG = logging.getLogger(__name__)
 BACKUP_FORMAT = "petdiary-portable"
 FORMAT_VERSION = 1
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 3
 MAX_ARCHIVE_BYTES = 256 * 1024 * 1024
 MAX_DATABASE_BYTES = 1024 * 1024 * 1024
 MAX_MANIFEST_BYTES = 32768
 MAX_COMPRESSION_RATIO = 250
 MAX_SAFETY_BACKUPS = 5
-BACKUP_TABLES = ("pets", "records", "pet_photos", "attachments", "products", "dose_checks")
-DELETE_ORDER = ("dose_checks", "attachments", "pet_photos", "records", "pets", "products")
+LEGACY_TABLES = ("pets", "records", "pet_photos", "attachments", "products", "dose_checks")
+SCHEMA2_TABLES = LEGACY_TABLES + ("costs",)
+BACKUP_TABLES = SCHEMA2_TABLES + ("cost_records",)
+TABLES_BY_VERSION = {1: LEGACY_TABLES, 2: SCHEMA2_TABLES, 3: BACKUP_TABLES}
+DELETE_ORDER = ("cost_records", "costs", "dose_checks", "attachments", "pet_photos", "records", "pets", "products")
 BACKUP_MEMBERS = {"manifest.json", "petdiary.sqlite3"}
 SAFETY_FOLDER = ".petdiary-safety-backups"
 CHUNK = 1024 * 1024
@@ -69,8 +72,15 @@ def _digest(path):
     return result.hexdigest()
 
 
-def _counts(con):
-    return {table: con.execute("SELECT count(*) FROM " + table).fetchone()[0] for table in BACKUP_TABLES}
+def _counts(con, tables=BACKUP_TABLES):
+    return {table: con.execute("SELECT count(*) FROM " + table).fetchone()[0] for table in tables}
+
+
+def _source_tables(con):
+    version = con.execute("PRAGMA user_version").fetchone()[0]
+    if version not in TABLES_BY_VERSION:
+        raise BackupError("Die Datenbank-Schema-Version ist nicht kompatibel.")
+    return TABLES_BY_VERSION[version]
 
 
 def _check_db(con):
@@ -84,13 +94,18 @@ def _check_db(con):
 def _verify_tables(source, destination):
     # Accept only a normal SQLite database without executable schema objects.
     entries = source.execute("SELECT type,name FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'").fetchall()
-    accepted = set(BACKUP_TABLES) | {"admin_account", "app_settings", "records_pet_day", "records_due",
+    tables = _source_tables(source)
+    accepted = set(tables) | {"admin_account", "app_settings", "records_pet_day", "records_due",
               "attachments_record", "records_parent"}
+    if "costs" in tables:
+        accepted.add("costs_pet_day")
+    if "cost_records" in tables:
+        accepted.add("cost_records_record")
     if any(kind not in ("table", "index") or name not in accepted for kind, name in entries):
         raise BackupError("Die Sicherung enthält unerwartete Datenbankobjekte.")
-    if source.execute("PRAGMA user_version").fetchone()[0] != SCHEMA_VERSION:
+    if source.execute("PRAGMA user_version").fetchone()[0] not in TABLES_BY_VERSION:
         raise BackupError("Die SQLite-Schema-Version ist nicht kompatibel.")
-    for table in BACKUP_TABLES:
+    for table in tables:
         incoming = {row[1] for row in source.execute("PRAGMA table_info(" + table + ")")}
         installed = {row[1] for row in destination.execute("PRAGMA table_info(" + table + ")")}
         if not incoming or incoming != installed:
@@ -105,7 +120,7 @@ def _safe_manifest(manifest):
         raise BackupError("Das ist keine gültige PetDiary-Sicherungsdatei.")
     if type(manifest.get("format_version")) is not int or manifest["format_version"] != FORMAT_VERSION:
         raise BackupError("Die Sicherungsversion wird nicht unterstützt.")
-    if type(manifest.get("schema_version")) is not int or manifest["schema_version"] != SCHEMA_VERSION:
+    if type(manifest.get("schema_version")) is not int or manifest["schema_version"] not in TABLES_BY_VERSION:
         raise BackupError("Die Datenbank-Schema-Version ist nicht kompatibel.")
     if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:[-.][A-Za-z0-9.]+)?", str(manifest.get("app_version", ""))):
         raise BackupError("Die App-Versionsangabe ist ungültig.")
@@ -117,7 +132,7 @@ def _safe_manifest(manifest):
         raise BackupError("Das Exportdatum ist ungültig.")
     if not isinstance(manifest.get("counts"), dict):
         raise BackupError("Die Datensatz-Metadaten fehlen.")
-    if set(manifest["counts"]) != set(BACKUP_TABLES) or any(type(x) is not int or x < 0 for x in manifest["counts"].values()):
+    if set(manifest["counts"]) != set(TABLES_BY_VERSION[manifest["schema_version"]]) or any(type(x) is not int or x < 0 for x in manifest["counts"].values()):
         raise BackupError("Ungültige Datensatz-Metadaten.")
 
 
@@ -135,8 +150,11 @@ def create_portable_backup(database, data_dir, app_version):
                 sanitizing.execute("PRAGMA secure_delete=ON")
                 sanitizing.execute("DELETE FROM admin_account")
                 sanitizing.execute("DELETE FROM app_settings")
-                sanitizing.execute("PRAGMA user_version=" + str(SCHEMA_VERSION))
-                counts = _counts(sanitizing)
+                # Support older offline snapshots, including single-link schema 2.
+                names = {row[0] for row in sanitizing.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+                schema_version = 3 if "cost_records" in names else 2 if "costs" in names else 1
+                sanitizing.execute("PRAGMA user_version=" + str(schema_version))
+                counts = _counts(sanitizing, _source_tables(sanitizing))
         finally:
             sanitizing.close()
         # A copy of a WAL-mode database must not depend on an external -wal file.
@@ -152,7 +170,7 @@ def create_portable_backup(database, data_dir, app_version):
         meta = {
             "format": BACKUP_FORMAT,
             "format_version": FORMAT_VERSION,
-            "schema_version": SCHEMA_VERSION,
+            "schema_version": schema_version,
             "created_at": created.isoformat(timespec="seconds"),
             "app_version": app_version,
             "database_sha256": _digest(snapshot),
@@ -273,7 +291,7 @@ def _replace_data(source, database, default_products):
             for table in DELETE_ORDER:
                 destination.execute("DELETE FROM " + table)
             # Keep IDs and relationships for linked records, photos, attachments and doses.
-            for table in BACKUP_TABLES:
+            for table in _source_tables(source):
                 columns = [row[1] for row in source.execute("PRAGMA table_info(" + table + ")")]
                 names = ",".join('"' + c + '"' for c in columns)
                 marks = ",".join("?" for _ in columns)
@@ -284,6 +302,13 @@ def _replace_data(source, database, default_products):
                         break
                     destination.executemany("INSERT INTO " + table + " (" + names + ") VALUES (" + marks + ")", rows)
             destination.executemany("INSERT OR IGNORE INTO products(name) VALUES (?)", ((p,) for p in default_products))
+            if destination.execute("SELECT 1 FROM costs c JOIN records r ON r.id=c.record_id WHERE c.pet_id!=r.pet_id OR r.parent_id IS NOT NULL").fetchone():
+                raise BackupError("Kosten enthalten ungültige Aktenverknüpfungen.")
+            # Convert legacy single links to the new many-to-many table.
+            destination.execute("INSERT OR IGNORE INTO cost_records(cost_id,record_id) SELECT id,record_id FROM costs WHERE record_id IS NOT NULL")
+            destination.execute("UPDATE costs SET record_id=NULL WHERE record_id IS NOT NULL")
+            if destination.execute("SELECT 1 FROM cost_records cr JOIN costs c ON c.id=cr.cost_id JOIN records r ON r.id=cr.record_id WHERE c.pet_id!=r.pet_id OR r.parent_id IS NOT NULL").fetchone():
+                raise BackupError("Kosten enthalten ungültige Aktenverknüpfungen.")
             if destination.execute("PRAGMA foreign_key_check").fetchone():
                 raise BackupError("Der Import hat ungültige Referenzen. Die Änderungen wurden zurückgerollt.")
             if destination.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
@@ -316,7 +341,9 @@ def restore_portable_backup(file, database, data_dir, default_products):
             finally:
                 current.close()
             _check_db(source)
-            actual = _counts(source)
+            if source.execute("PRAGMA user_version").fetchone()[0] != manifest["schema_version"]:
+                raise BackupError("Schema-Version in Manifest und Datenbank stimmen nicht überein.")
+            actual = _counts(source, _source_tables(source))
             if actual != manifest["counts"]:
                 raise BackupError("Die Anzahl der Datensätze stimmt nicht mit den Backup-Metadaten überein.")
             # Only after full validation: back up the original, including its credentials.

@@ -1,0 +1,22 @@
+# GHCR development preview; separate from the stable deployment.
+name: petdiary-develop
+services:
+  petdiary:
+    image: ghcr.io/skoun181/petdiary:develop
+    container_name: petdiary-develop
+    restart: unless-stopped
+    ports:
+      - "8081:8080"
+    volumes:
+      - petdiary-develop-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    init: true
+volumes:
+  petdiary-develop-data:
+    name: petdiary-develop-data

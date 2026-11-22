@@ -1,11 +1,11 @@
-# 🐾 PetDiary 0.0.5
+# 🐾 PetDiary 0.0.6
 
 **Self-hosted · Docker · SQLite · Home Assistant**
 
 
 Private, ressourcenschonende Tiergesundheitsakte für den eigenen Docker-Server. Keine Cloud, kein JavaScript-Framework, keine zusätzliche Datenbank. Deutschsprachige Weboberfläche in Mintgrün und Petrol, inspiriert von modernen Tiergesundheits-Apps.
 
-**Status:** Version 0.0.5 – portabler ZIP-Export und sicherer Import für Serverumzüge. Aktuelle Veröffentlichungen und Versions-Tags unter [GitHub Releases](https://github.com/Skoun181/PetDiary/releases) und [Docker Hub](https://hub.docker.com/r/skoun181/petdiary/tags). Ein lokales Administratorkonto pro Installation; keine Mehrbenutzerverwaltung.
+**Status:** Version 0.0.6 – Kostenverwaltung mit mehreren Aktenverknüpfungen pro Rechnung, PDF-Gesundheitsakte und Dark Mode. Aktuelle Veröffentlichungen und Versions-Tags unter [GitHub Releases](https://github.com/Skoun181/PetDiary/releases) und [Docker Hub](https://hub.docker.com/r/skoun181/petdiary/tags). Ein lokales Administratorkonto pro Installation; keine Mehrbenutzerverwaltung.
 
 [📖 Bebilderte Bedienungsanleitung](docs/USER_GUIDE.md) · [🏠 Home Assistant](docs/HOME_ASSISTANT.md) · [📦 Backup und Umzug](docs/BACKUP_MIGRATION.md) · [🔑 Passwort zurücksetzen](docs/PASSWORD_RESET.md) · [Änderungen](CHANGELOG.md)
 
@@ -46,6 +46,23 @@ GET /api/v1/medications?days=7 liefert geplante Gaben ab dem heutigen Tag (optio
 
 Der Katalog enthält 607 unterschiedliche Bezeichnungen (einschließlich vorhandener Präparatevarianten). Die bereitgestellten A–Z-Listen umfassen 343 Katzen- und 468 Hundeeinträge, zusammen 540 unterschiedliche Namen. 458 davon wurden neu ergänzt. Gemeinsame Handels- und Wirkstoffnamen werden nur einmal gespeichert. Die Vorschläge der Tierart erscheinen zuerst; Hinweise zeigen die Herkunftsliste und bewahren die Quellmarkierungen für Ergänzungs-/Pflegeprodukte, Humanarzneimittel bzw. mögliche Umwidmung und zu prüfende Varianten. Alle Einträge, auch unmarkierte, sind ungeprüft. Die Listen dienen ausschließlich der nachträglichen Dokumentation, nicht der Therapieauswahl. Freitext und bereits gespeicherte Namen sowie Pläne bleiben erhalten. Keine Dosierungen oder Indikationen aus den Listen übernommen. Permethrinhaltige Hundepräparate können für Katzen lebensgefährlich sein.
 
+## Neue Funktionen in 0.0.6
+
+### Kostenverwaltung
+- Menü **Kosten** öffnen und **+ Kosten** wählen. Tier, Datum, Kategorie, Titel und Eurobetrag angeben.
+- Bereits erhaltene Versicherungserstattung optional erfassen, später bearbeiten; Eigenanteil = Kosten minus Erstattung. Beträge werden als ganze Cent gespeichert.
+- Nach Jahr oder Tier filtern; Gesamtausgaben, Erstattungen, Eigenanteil und Kategorieverteilung ansehen.
+- Rechnungen als PDF/Bild am Akteneintrag hochladen und im Kostenformular mehrere Akteneinträge desselben Tieres per Checkbox auswählen (z. B. Impfung, Entwurmung und Medikamente auf einer Rechnung). Der Rechnungsbetrag zählt nur einmal. Kosten können auch ohne Akteneintrag angelegt werden.
+
+### PDF-Gesundheitsakte
+- Tierprofil öffnen und **PDF-Gesundheitsakte** anklicken.
+- Die PDF enthält Profil-/Halterdaten, die chronologische Gesundheitsakte, Impfungen, Befunde, Notizen, Präparate, Medikationspläne und Erinnerungen. Anhänge werden namentlich aufgeführt, nicht eingebettet; Kosten und Zugangsdaten bleiben außen vor.
+- Die PDF wird lokal erzeugt und kann gespeichert, ausgedruckt oder gezielt an eine Tierarztpraxis weitergegeben werden. Kein amtlicher Impfpass.
+
+### Dark Mode
+- Einstellungen → Erscheinungsbild → Design: System, Hell oder Dunkel.
+- Die Auswahl wird im jeweiligen Browser gespeichert. Im Systemmodus folgt die App der Betriebssystemeinstellung.
+
 ## 📦 Backup erstellen, importieren und auf einen anderen Server umziehen (ab 0.0.5)
 
 PetDiary kann die vollständige Tiergesundheitsakte direkt über den Browser als **portable ZIP-Datei** sichern und in einer neuen PetDiary-Instanz wiederherstellen – zum Beispiel bei einem Wechsel von Dockhand auf einen anderen Docker-Host oder in einen frischen LXC-Container. Die Funktion steht ab **Version 0.0.5** unter **Einstellungen → Daten sichern und umziehen** zur Verfügung.
@@ -59,6 +76,7 @@ PetDiary kann die vollständige Tiergesundheitsakte direkt über den Browser als
 | Medikamente, Einzelgaben, dokumentierte Mengen, individuelle Pläne und Abhakstatus | ✅ | Vollständig übernommen |
 | Profilbilder, angehängte Bilder und PDF-Dokumente | ✅ | Vollständig übernommen |
 | Eigene Präparatenamen und gespeicherter Präparatekatalog | ✅ | Übernommen und mit dem aktuellen Grundkatalog ergänzt |
+| Kosteneinträge und Erstattungen (ab 0.0.6) | ✅ | Vollständig übernommen, einschließlich Aktenverknüpfungen |
 | Exportdatum (UTC), App-/Schema-Version, Tabellenanzahlen und SHA-256-Prüfsumme | ✅ | Zur Validierung genutzt |
 | Admin-Benutzername, Konto und Passwort-Hash | ❌ | **Zugangsdaten der Zielinstanz bleiben erhalten** |
 | Home-Assistant-API-Token und gespeicherter Token-Hash | ❌ | **Token der Zielinstanz bleibt erhalten** |
@@ -67,6 +85,8 @@ PetDiary kann die vollständige Tiergesundheitsakte direkt über den Browser als
 | Host-Port, Firewall, HTTPS-Proxy, .env und andere Servereinstellungen | ❌ | Bei Bedarf separat übernehmen oder neu einrichten |
 
 **Gut zu wissen:** PetDiary speichert sämtliche hochgeladenen Dateien bereits in SQLite. Die ZIP-Datei enthält `petdiary.sqlite3` (bereinigte, konsistente Kopie inklusive Bilder/PDFs) und `manifest.json` (Metadaten/Prüfsumme). Es wird kein zweiter Dateiordner benötigt. Der Export enthält **keine** Zugangsdaten der Quellinstanz, aber weiterhin persönliche Tier- und Halterdaten. Bewahre ihn geschützt auf.
+
+**Backup-Kompatibilität:** 0.0.6 exportiert Schema 3 und kann ältere Schema-1-ZIPs (0.0.5) und Schema-2-ZIPs (früherer 0.0.6-Stand) importieren. Bestehende Einzelverknüpfungen werden automatisch migriert. Beim Import eines Schema-1-Backups werden vorhandene Kostendaten der Zielinstanz ersetzt (leer); Schema-2-Backups übernehmen die vorhandenen Kosten und Einzelverknüpfungen. Schema-3-ZIPs sind nicht in älteren Versionen importierbar. Die browserlokale Designwahl ist nicht Teil des ZIPs.
 
 ### Schritt 1 – Daten in PetDiary exportieren
 
@@ -86,7 +106,7 @@ Auf dem neuen Rechner Docker/Compose bzw. Dockhand bereitstellen. Für einen **n
 ~~~yaml
 services:
   petdiary:
-    image: skoun181/petdiary:0.0.5
+    image: skoun181/petdiary:0.0.6
     container_name: petdiary
     restart: unless-stopped
     ports:
@@ -227,6 +247,55 @@ Alternativ Methode A nur bis zum lokalen Build ausführen und einen manuellen St
 **Docker-Hub-Installation:** Unter Stacks **Create stack**, Name `petdiary`, unveränderte Stack-YAML einfügen, ggf. Registry-Zugang konfigurieren und deployen. Keine ENV-Zugangsdaten für PetDiary erforderlich.
 
 Offizielle Anleitung: [Dockhand – Compose stacks](https://dockhand.pro/manual/).
+
+### Develop – GitHub Container Registry (GHCR) in Dockhand
+
+Der separate Workflow [Publish Develop to GHCR](https://github.com/Skoun181/PetDiary/actions/workflows/develop-publish.yml) baut bei Pushes auf den Branch `develop` nach erfolgreichen Python-Tests und Container-Starttests Images für AMD64 und ARM64. Der bestehende Stable-Release auf Docker Hub und dessen Tags bleiben unverändert. Develop ist eine Testversion, keine neue Stable-Freigabe.
+
+1. Unter GitHub Actions prüfen, dass der neueste Publish-Workflow erfolgreich abgeschlossen ist.
+2. In Dockhand unter Settings → Registries eine GHCR-Registry (`https://ghcr.io`) mit GitHub-Benutzername und Personal Access Token (classic) mit `read:packages` einrichten oder die vorhandene GitHub-Registry wiederverwenden. Der Benutzer muss Zugriff auf das Package haben. Neu angelegte GHCR-Packages sind standardmäßig privat.
+3. Unter Images → Pull Image den Ziel-Docker-Host und die GHCR-Registry auswählen. Image: `skoun181/petdiary`, Tag: `develop`. Dockhand ergänzt `ghcr.io/` selbst; nicht doppelt eingeben.
+4. Unter Stacks → Create stack einen separaten Stack `petdiary-develop` erstellen und die [GHCR-Compose-Vorlage](deploy/compose.develop.yaml) einfügen:
+
+~~~yaml
+# GHCR development preview; separate from the stable deployment.
+name: petdiary-develop
+services:
+  petdiary:
+    image: ghcr.io/skoun181/petdiary:develop
+    container_name: petdiary-develop
+    restart: unless-stopped
+    ports:
+      - "8081:8080"
+    volumes:
+      - petdiary-develop-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    init: true
+volumes:
+  petdiary-develop-data:
+    name: petdiary-develop-data
+~~~
+
+5. Stack deployen. Bei einem bereits belegten Host-Port `8081` den linken Port ändern; der Container-Port bleibt `8080`. Keine ENV-Zugangsdaten, kein JWT_SECRET erforderlich.
+6. `http://SERVER-IP:8081` im vertrauenswürdigen Netz öffnen und ein eigenes lokales Administratorkonto einrichten (Passwort mindestens zwölf Zeichen). Erst danach ggf. per HTTPS-Reverse-Proxy erreichbar machen.
+7. Optional aus Stable ab 0.0.5 unter Einstellungen → Daten sichern und umziehen eine ZIP-Sicherung exportieren und auf Develop importieren. Das Zielkonto und dessen Home-Assistant-Token bleiben erhalten. Das produktive Volume niemals in der Develop-Instanz einhängen.
+
+Für spätere Develop-Updates das Image erneut pullen und den Stack mit unverändertem Develop-Volume neu deployen. `develop` ist ein beweglicher Tag; ein erfolgreich veröffentlichter Commit kann auch über `sha-<vollständiger Commit-SHA>` gepinnt werden. Kein `docker compose down -v` ausführen.
+
+Alternativ im Terminal:
+
+~~~sh
+docker login ghcr.io -u DEIN_GITHUB_USERNAME
+docker pull ghcr.io/skoun181/petdiary:develop
+~~~
+
+Bei `manifest unknown` oder `not found` zunächst den Publish-Workflow, den Image-Pfad und den Package-Zugriff prüfen.
 
 ### F. Erststart für alle Installationsmethoden
 

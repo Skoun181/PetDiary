@@ -2,7 +2,7 @@
 
 ## Branches
 - stable: produktiver Quellcode, nur geprüfte Releases. Standardbranch.
-- develop: laufende Entwicklung. Pushes führen Tests aus, veröffentlichen aber keine Docker-Images.
+- develop: laufende Entwicklung. Pushes führen Tests aus und veröffentlichen nach erfolgreichen Tests das separate GHCR-Image `ghcr.io/skoun181/petdiary:develop`; Docker Hub bleibt bis zum Stable-Merge unverändert.
 
 Temporäre Arbeitsbranches dürfen nach dem Merge gelöscht werden. Versionshistorie über unveränderliche Git-Tags und GitHub Releases, keine dauerhaften Release-Branches.
 
@@ -29,3 +29,7 @@ Unter [Actions](https://github.com/Skoun181/PetDiary/actions) den fehlgeschlagen
 
 Die ZIP-Export-/Importfunktion wurde nach erfolgreichen Integrationstests und Docker-Smoke-Test aus `develop` über einen Pull Request nach `stable` übernommen. Der Release-Workflow erstellt die GitHub-Version `v0.0.5` und Docker-Hub-Tags `0.0.5`, `latest` und `stable`. Ein Umzug vorhandener produktiver Instanzen ist ausschließlich nach einer separaten Sicherung und Erhalt des bisherigen Volumes zu empfehlen. Für ältere 0.0.4-Installationen steht der einmalige Offline-Konverter in [BACKUP_MIGRATION.md](BACKUP_MIGRATION.md) bereit.
 
+
+## Version 0.0.6
+
+Kostenverwaltung mit Mehrfachverknüpfungen, PDF-Gesundheitsakte und Dark Mode. SQLite-Schema 3 wird beim Start automatisch angelegt; bestehende Einzelverknüpfungen werden übernommen. Portable ZIPs aus Schema 1 und 2 sind importierbar. Vor dem Update ein externes Backup erstellen und das bestehende Volume beibehalten. Für einen Downgrade eine Sicherung aus der früheren Version und ein separates Volume verwenden.

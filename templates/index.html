@@ -4,11 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PetDiary · Deine Tierakte</title>
+<script src="{{ url_for('static',filename='theme.js') }}"></script>
 <link rel="stylesheet" href="{{ url_for('static',filename='style.css') }}">
 <script src="{{ url_for('static',filename='forms.js') }}" defer></script>
 </head>
 <body>
-<header class="top"><div class="top-inner"><a class="brand" href="{{ url_for('home') }}"><span class="logo">🐾</span> PetDiary<span class="brand-dot">.</span></a>{% if screen not in ['setup','login'] %}<nav><a href="{{ url_for('home') }}">Übersicht</a><a href="{{ url_for('reminders') }}">Erinnerungen</a><a href="{{ url_for('settings') }}">Einstellungen</a></nav>{% endif %}</div></header>
+<header class="top"><div class="top-inner"><a class="brand" href="{{ url_for('home') }}"><span class="logo">🐾</span> PetDiary<span class="brand-dot">.</span></a>{% if screen not in ['setup','login'] %}<nav><a href="{{ url_for('home') }}">Übersicht</a><a href="{{ url_for('reminders') }}">Erinnerungen</a><a href="{{ url_for('costs') }}">Kosten</a><a href="{{ url_for('settings') }}">Einstellungen</a></nav>{% endif %}</div></header>
 <main>
 {% for message in get_flashed_messages() %}<div class="alert">{{ message }}</div>{% endfor %}
 {% macro field(name,label,data,type='text',required=false) %}<label>{{ label }}<input name="{{ name }}" type="{{ type }}" value="{{ data.get(name,'') or '' }}" {% if required %}required{% endif %} {% if type=='text' %}maxlength="300"{% endif %}></label>{% endmacro %}
@@ -31,6 +32,7 @@
 <button>{{ 'PetDiary einrichten' if screen=='setup' else 'Anmelden' }}</button></form></section>
 {% elif screen=='settings' %}
 <p class="eyebrow">DEIN KONTO</p><h1>Einstellungen</h1>
+<section class="card"><h2>Erscheinungsbild</h2><label>Design<select id="theme-choice"><option value="system">System (automatisch)</option><option value="light">Hell</option><option value="dark">Dunkel</option></select></label><p class="muted">Die Auswahl wird in diesem Browser gespeichert.</p></section>
 <section class="card"><h2>Home Assistant</h2><p>API-Status: <strong>{{ 'Token aktiv' if token_active else 'Kein Token eingerichtet' }}</strong></p><p class="muted">Die API ist nur lesend. Ein neuer Token ersetzt den bisherigen. Bewahre ihn sicher auf; er wird nur nach Erstellung angezeigt.</p>
 {% if new_token %}<label>Neuer API-Token<input readonly value="{{ new_token }}" autocomplete="off" spellcheck="false"></label>{% endif %}
 <label>API-Endpunkt für Erinnerungen<input readonly value="{{ url_for('api_reminders', _external=false) }}?days=365"></label><label>API-Endpunkt für Medikamente<input readonly value="{{ url_for('api_medications', _external=false) }}?days=7"></label>
@@ -43,7 +45,7 @@
 <button>Kontodaten speichern</button></form></section>
 <section class="card" id="backups">
 <h2>📦 Daten sichern und umziehen</h2>
-<p>Erstelle ein portables ZIP mit allen Tierprofilen, Akteneinträgen, Medikamentenplänen, Erledigt-Häkchen, eigenen Präparaten und allen Bildern und PDF-Anhängen. Passwörter, API-Token und Sitzungsschlüssel werden <strong>nicht</strong> exportiert.</p>
+<p>Erstelle ein portables ZIP mit allen Tierprofilen, Akteneinträgen, Medikamentenplänen, Erledigt-Häkchen, eigenen Präparaten, Kosteneinträgen, Erstattungen und allen Bildern und PDF-Anhängen. Passwörter, API-Token und Sitzungsschlüssel werden <strong>nicht</strong> exportiert.</p>
 <p class="muted">Die ZIP-Datei enthält persönliche Tier- und Halterdaten. Bewahre sie geschützt auf und lösche ungeschützte Kopien nach dem Umzug.</p>
 <form method="post" action="{{ url_for('backup_export') }}" data-backup="export">{{ csrf_field() }}
 <label>Aktuelles Passwort zur Bestätigung<input type="password" name="current_password" autocomplete="current-password" maxlength="256" required></label>
@@ -95,6 +97,7 @@
 {% elif screen=='pet' %}
 <a class="back" href="{{ url_for('home') }}">← Meine Tiere</a>
 <section class="hero pet-hero">{{ avatar(pet,true) }}<div class="grow"><p class="eyebrow">GESUNDHEITSAKTE</p><h1>{{ pet.name }}</h1><p>{{ pet.species }}{% if pet.breed %} · {{ pet.breed }}{% endif %}{% if pet.birth %} · Geb. {{ pet.birth }}{% endif %}</p><a class="link" href="{{ url_for('pet_edit',pid=pet.id) }}">Profil bearbeiten →</a></div><a class="button" href="{{ url_for('record_edit',pid=pet.id,kind='vaccine' if tab=='passport' else 'visit') }}">+ Eintrag</a></section>
+<div class="pet-tools"><a class="button secondary small" href="{{ url_for('pet_pdf',pid=pet.id) }}">↓ PDF-Gesundheitsakte</a><a class="button secondary small" href="{{ url_for('costs',pet=pet.id) }}">Kosten ansehen</a></div>
 <nav class="tabs" aria-label="Tierakte"><a class="{{ 'active' if tab!='passport' else '' }}" href="{{ url_for('pet_detail',pid=pet.id) }}">Gesundheitsakte</a><a class="{{ 'active' if tab=='passport' else '' }}" href="{{ url_for('pet_detail',pid=pet.id,tab='passport') }}">Digitaler Impfpass</a></nav>
 {% if tab=='passport' %}
 <section class="card passport"><p class="eyebrow">PRIVATE DIGITALE DOKUMENTATION</p><h2>Impfpass · {{ pet.name }}</h2><p class="muted">Orientiert am Heimtierausweis. Kein amtlicher Nachweis und kein Ersatz für das Original bei Reisen.</p><dl class="passport-grid">
@@ -114,9 +117,22 @@
 {% if r.medicines %}<div class="med-summary"><h4>Medikamente</h4>{% for m in r.medicines %}<div class="med-summary-row"><strong>{{ m.product }}</strong><span class="muted">{{ m.day }}{% if m.batch %} · Charge {{ m.batch }}{% endif %}</span><span>{{ 'Medikamentenplan' if m.duration else 'Verabreicht' }}{% if m.dose %} · {{ m.dose }} {{ m.dose_unit }}{% endif %}{% if m.duration %} · {{ m.duration }} Tage · {{ m.dose_times.replace(',',', ') ~ ' Uhr' if m.dose_times else 'Ohne feste Uhrzeit' }} · <a href="{{ url_for('home',pet=pet.id,week=m.day) }}#med-calendar">Zum Kalender →</a>{% endif %}</span></div>{% endfor %}</div>{% endif %}
 {% if r.due %}<div class="due">📅 {{ 'Erledigte Erinnerung' if r.done else 'Nächste Erinnerung' }}: {{ r.due }} {% if r.done %}<span class="muted">✓</span>{% endif %}</div>{% endif %}
 {% if r.files %}<div class="attachments">{% for f in r.files %}<a href="{{ url_for('attachment',aid=f.id) }}">📎 {{ f.name }} <span>Vorschau →</span></a>{% endfor %}</div>{% endif %}
-<a class="link" href="{{ url_for('record_edit',pid=pet.id,rid=r.id) }}">Bearbeiten →</a></article>
+<a class="link" href="{{ url_for('record_edit',pid=pet.id,rid=r.id) }}">Bearbeiten →</a> · <a class="link" href="{{ url_for('cost_edit',pet=pet.id,record=r.id) }}">Kosten erfassen</a></article>
 {% else %}<section class="card empty">Noch keine Einträge in diesem Bereich.</section>{% endfor %}
 </div>
+{% elif screen=='costs' %}
+<p class="eyebrow">AUSGABEN UND ERSTATTUNGEN</p><div class="section-title"><h1>Kostenübersicht</h1><a class="button" href="{{ url_for('cost_edit',pet=pid) }}">+ Kosten</a></div>
+<form class="card cost-filter" method="get"><div class="fields"><label>Zeitraum<select name="year"><option value="all" {% if year=='all' %}selected{% endif %}>Alle Jahre</option>{% for y in years %}<option value="{{ y }}" {% if y==year %}selected{% endif %}>{{ y }}</option>{% endfor %}</select></label><label>Tier<select name="pet"><option value="">Alle Tiere</option>{% for p in pets %}<option value="{{ p.id }}" {% if pid==p.id|string %}selected{% endif %}>{{ p.name }}</option>{% endfor %}</select></label></div><button class="secondary small">Filtern</button></form>
+<div class="cost-totals"><section class="card"><p class="muted">Gesamtausgaben</p><h2>{{ euro(total) }}</h2></section><section class="card"><p class="muted">Erstattet</p><h2>{{ euro(reimbursed) }}</h2></section><section class="card"><p class="muted">Eigenanteil</p><h2>{{ euro(total-reimbursed) }}</h2></section></div>
+<section class="card"><h2>Ausgaben nach Kategorie</h2>{% if total %}{% for group in breakdown if group.cents %}<div class="cost-bar"><div><strong>{{ group.label }}</strong><span>{{ euro(group.cents) }}</span></div><progress value="{{ group.cents }}" max="{{ total }}" aria-label="{{ group.label }}"></progress></div>{% endfor %}{% else %}<p class="muted">Keine Ausgaben im gewählten Zeitraum.</p>{% endif %}</section>
+<h2>Kosteneinträge</h2>
+{% for c in entries %}<article class="card"><div class="entry-top"><span class="pill">{{ cost_categories[c.category] }}</span><time>{{ c.day }}</time></div><h3>{{ c.title }}</h3><p class="muted">{{ c.pet_name }}</p><dl class="passport-grid"><div><dt>Betrag</dt><dd>{{ euro(c.cents) }}</dd></div><div><dt>Erstattet</dt><dd>{{ euro(c.reimbursed) }}</dd></div><div><dt>Eigenanteil</dt><dd>{{ euro(c.cents-c.reimbursed) }}</dd></div></dl>{% if c.notes %}<p class="notes">{{ c.notes }}</p>{% endif %}{% if c.records %}<div class="cost-linked"><strong>Verknüpfte Akteneinträge ({{ c.records|length }})</strong>{% for r in c.records %}<a href="{{ url_for('record_edit',pid=c.pet_id,rid=r.id) }}">{{ r.day }} · {{ categories.get(r.kind,r.kind) }} · {{ r.title }} →</a>{% endfor %}</div>{% endif %}<a class="link" href="{{ url_for('cost_edit',cid=c.id) }}">Bearbeiten →</a></article>{% else %}<section class="card empty">Noch keine Kosten für diesen Filter erfasst.</section>{% endfor %}
+{% elif screen=='cost_edit' %}
+<a class="back" href="{{ url_for('costs') }}">← Kostenübersicht</a><h1>{{ 'Kosten bearbeiten' if cid else 'Kosten erfassen' }}</h1>
+{% if not pets %}<section class="card">Lege zuerst ein Tierprofil an.</section>{% else %}
+<form method="post" class="card editor">{{ csrf_field() }}<div class="fields"><label>Tier *<select name="pet_id" required>{% for p in pets %}<option value="{{ p.id }}" {% if entry.pet_id|string==p.id|string %}selected{% endif %}>{{ p.name }}</option>{% endfor %}</select></label>{{ field('day','Datum *',entry,'date',true) }}<label>Kategorie *<select name="category">{% for key,label in cost_categories.items() %}<option value="{{ key }}" {% if entry.category==key %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>{{ field('title','Bezeichnung *',entry,required=true) }}<label>Kosten (EUR) *<input name="amount" inputmode="decimal" maxlength="10" required value="{{ entry.amount }}" placeholder="125,50"></label><label>Bereits erstattet (EUR)<input name="refund" inputmode="decimal" maxlength="10" value="{{ entry.refund }}" placeholder="0,00"></label></div>
+<fieldset class="cost-record-picker" id="cost-record-picker"><legend>Akteneinträge / Rechnungen (optional)</legend><p class="muted">Wähle beliebig viele Einträge desselben Tieres. Der Rechnungsbetrag wird nur einmal gezählt.</p><label>Einträge suchen<input type="search" id="cost-record-search" placeholder="Datum, Impfung, Entwurmung …" autocomplete="off"></label><div class="cost-record-options">{% for r in records %}<label class="cost-record-option" data-pet="{{ r.pet_id }}"><input type="checkbox" name="record_id" value="{{ r.id }}" {% if r.id|string in entry.record_ids %}checked{% endif %}><span><strong>{{ r.title }}</strong><span class="muted cost-record-meta">{{ r.day }} · {{ categories.get(r.kind,r.kind) }} · {{ r.pet_name }}</span></span></label>{% else %}<p class="muted">Noch keine Akteneinträge vorhanden.</p>{% endfor %}</div><p class="muted" id="cost-record-count" aria-live="polite"></p></fieldset><p class="muted">Rechnungen als PDF/Bild in einem passenden Akteneintrag hochladen. Erstattungen können später ergänzt werden.</p><label>Notizen<textarea name="notes" maxlength="10000" rows="4">{{ entry.notes }}</textarea></label><button>Kosten speichern</button></form>
+{% if cid %}<details class="card danger-area"><summary>Kosteneintrag löschen</summary><form method="post" action="{{ url_for('cost_delete',cid=cid) }}">{{ csrf_field() }}<label class="inline-check"><input type="checkbox" name="confirm" value="yes" required> Eintrag endgültig löschen</label><button class="danger">Löschen</button></form></details>{% endif %}{% endif %}
 {% elif screen=='record_edit' %}
 <a class="back" href="{{ url_for('pet_detail',pid=pet.id) }}">← Akte von {{ pet.name }}</a><h1>{{ 'Eintrag bearbeiten' if rid else 'Neuer Akteneintrag' }}</h1>
 <form method="post" enctype="multipart/form-data" class="card editor">{{ csrf_field() }}

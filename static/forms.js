@@ -246,7 +246,7 @@ document.querySelectorAll("form[data-backup]").forEach(form=>{
         const data=await response.json();
         const info=data.imported||{};
         status.textContent="✅ Import erfolgreich: "+info.pets+" Tiere, "+info.records+" Akteneinträge, "+
-          info.attachments+" Anhänge und "+info.pet_photos+" Profilbilder. Interne Sicherheitskopie: "+
+          info.attachments+" Anhänge, "+info.costs+" Kosteneinträge und "+info.pet_photos+" Profilbilder. Interne Sicherheitskopie: "+
           data.safety_backup+". Die neue Akte ist sofort verfügbar.";
         form.reset();
       }
@@ -261,3 +261,30 @@ document.querySelectorAll("form[data-backup]").forEach(form=>{
     }
   });
 });
+
+/* Multi-select cost links; filtering never discards selected items of the current pet. */
+(function(){
+  const picker=document.getElementById("cost-record-picker");
+  if(!picker)return;
+  const pet=picker.closest("form").querySelector('select[name="pet_id"]');
+  const search=document.getElementById("cost-record-search");
+  const count=document.getElementById("cost-record-count");
+  const options=Array.from(picker.querySelectorAll(".cost-record-option"));
+  function refresh(){
+    const needle=search.value.trim().toLocaleLowerCase("de");
+    let selected=0,visible=0;
+    for(const option of options){
+      const checkbox=option.querySelector("input");
+      const belongs=option.dataset.pet===pet.value;
+      checkbox.disabled=!belongs;
+      option.hidden=!belongs||(!checkbox.checked&&!option.textContent.toLocaleLowerCase("de").includes(needle));
+      if(belongs&&checkbox.checked)selected++;
+      if(!option.hidden)visible++;
+    }
+    count.textContent=selected+" ausgewählt"+(visible?"":" · Keine passenden Akteneinträge");
+  }
+  pet.addEventListener("change",()=>{search.value="";refresh();});
+  search.addEventListener("input",refresh);
+  picker.addEventListener("change",refresh);
+  refresh();
+})();
