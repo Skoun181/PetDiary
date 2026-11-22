@@ -1,4 +1,4 @@
-# PetDiary 0.0.5 – Bedienungsanleitung
+# PetDiary 0.0.6 – Bedienungsanleitung (Develop)
 
 [Zurück zur README](../README.md) · [Passwort zurücksetzen](PASSWORD_RESET.md)
 
@@ -128,3 +128,15 @@ Zur Datensicherung, Wiederherstellung, Aktualisierung und Fehlersuche siehe [REA
 Unter **Einstellungen → Daten sichern und umziehen** lässt sich ein portables ZIP mit allen Tier- und Gesundheitsdaten sowie Bildern/PDFs erstellen. Ein Admin-Passwort ist erforderlich; das ZIP enthält keine Admin-Konten, Passwort-Hashes, API-Token oder Session-Geheimnisse. Im selben Bereich können ZIP-Dateien geprüft und nach ausdrücklicher Bestätigung importiert werden. Der Import ersetzt die vorhandenen **Tierdaten** und legt vorher eine interne Sicherheitskopie der Ziel-Datenbank an. Die Zugangsdaten der Zielinstanz bleiben erhalten.
 
 **Ab 0.0.5 auch in Stable verfügbar:** [Vollständige Schritt-für-Schritt-Anleitung für den Export, Import, Dockhand, alte 0.0.4-Installationen und Serverumzüge](BACKUP_MIGRATION.md). Beim Umzug müssen Image, Compose-Datei, Portfreigaben und das neue Volume separat vorbereitet werden; die ZIP enthält die Anwendungsdaten, nicht die Serverkonfiguration.
+
+## Kosten (0.0.6)
+
+Öffne Kosten → + Kosten. Erfasse Tier, Datum, Kategorie, Beschreibung und Betrag in EUR. Bereits erhaltene Erstattung ist optional; der Eigenanteil wird automatisch berechnet. Lade Rechnungen am Akteneintrag hoch und verknüpfe diesen im Kostenformular. Filtere die Übersicht nach Tier und Jahr. Einträge können bearbeitet oder gelöscht werden.
+
+## PDF-Gesundheitsakte
+
+Öffne ein Tierprofil und klicke auf PDF-Gesundheitsakte. Die lokal erzeugte Datei enthält Profil, Halterangaben und die chronologische medizinische Akte. Anhänge erscheinen als Dateinamen, nicht als eingebettete Originale. Kostendaten und Zugangsdaten sind ausgeschlossen. Das PDF enthält private Daten und ist kein amtlicher Impfpass.
+
+## Erscheinungsbild
+
+Unter Einstellungen → Erscheinungsbild wähle System, Hell oder Dunkel. Die Auswahl bleibt im jeweiligen Browser gespeichert.
