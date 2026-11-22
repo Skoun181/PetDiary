@@ -309,15 +309,18 @@ class PetDiaryTest(unittest.TestCase):
             secret=con.execute("SELECT value FROM app_settings WHERE key='session_secret'").fetchone()[0]
             tokenhash=con.execute("SELECT value FROM app_settings WHERE key='api_token_hash'").fetchone()[0]
             pwdhash=con.execute("SELECT password_hash FROM admin_account").fetchone()[0]
+        self.assertEqual(self.post("/costs/new",pet_id=a.split("/")[-1],record_id="1",day="2026-11-20",
+                                  category="vet",title="Rechnung",amount="125,50",refund="50,25",notes="").status_code,303)
         exported=self.make_portable_backup()
         with zipfile.ZipFile(io.BytesIO(exported)) as archive:
             self.assertEqual(set(archive.namelist()),{"manifest.json","petdiary.sqlite3"})
             meta=json.loads(archive.read("manifest.json"))
             raw=archive.read("petdiary.sqlite3")
-            self.assertEqual(meta["schema_version"],1)
-            self.assertEqual(meta["app_version"],"0.0.5")
+            self.assertEqual(meta["schema_version"],2)
+            self.assertEqual(meta["app_version"],"0.0.6")
             self.assertEqual(hashlib.sha256(raw).hexdigest(),meta["database_sha256"])
             self.assertEqual(meta["counts"]["attachments"],1)
+            self.assertEqual(meta["counts"]["costs"],1)
             self.assertNotIn(secret.encode(),raw)
             self.assertNotIn(tokenhash.encode(),raw)
             self.assertNotIn(pwdhash.encode(),raw)
@@ -327,7 +330,7 @@ class PetDiaryTest(unittest.TestCase):
                 self.assertEqual(con.execute("SELECT count(*) FROM admin_account").fetchone()[0],0)
                 self.assertEqual(con.execute("SELECT count(*) FROM app_settings").fetchone()[0],0)
                 self.assertEqual(con.execute("SELECT count(*) FROM attachments").fetchone()[0],1)
-                self.assertEqual(con.execute("PRAGMA user_version").fetchone()[0],1)
+                self.assertEqual(con.execute("PRAGMA user_version").fetchone()[0],2)
         with tempfile.TemporaryDirectory() as newdir:
             newapp=create_app(dict(TESTING=True,DATA_DIR=newdir))
             other=newapp.test_client()
@@ -357,6 +360,8 @@ class PetDiaryTest(unittest.TestCase):
             self.assertEqual(data["imported"]["pets"],1)
             self.assertEqual(data["imported"]["records"],2)
             self.assertEqual(data["imported"]["attachments"],1)
+            self.assertEqual(data["imported"]["costs"],1)
+            self.assertIn("75,25 €".encode(),other.get("/costs?year=2026").data)
             self.assertIn(b"Kopie",other.get("/").data)
             self.assertNotIn(b"Alter Bestand",other.get("/").data)
             self.assertEqual(other.get("/attachments/1/content").data,png)
@@ -438,6 +443,84 @@ class PetDiaryTest(unittest.TestCase):
         self.assertEqual(response.status_code,400,response.get_data(as_text=True))
         self.assertIn(b"Vorher",self.client.get("/").data)
         self.assertEqual(self.client.get("/healthz").status_code,200)
+
+
+    def test_costs_validation_filters_and_delete(self):
+        a=self.pet("Kostenkatze")
+        b=self.pet("AnderesTier")
+        pid=a.split("/")[-1]
+        other=b.split("/")[-1]
+        self.assertEqual(self.post(a+"/records/new",kind="visit",title="Rechnung",
+                                  day="2026-11-20").status_code,303)
+        data=dict(pet_id=pid,record_id="1",day="2026-11-20",category="vet",title="Praxis",
+                  amount="125,50",refund="50,25",notes="Beleg")
+        self.assertEqual(self.post("/costs/new",**data).status_code,303)
+        self.assertEqual(self.post("/costs/new",**{**data,"record_id":"","pet_id":other,
+                         "day":"2025-01-01","title":"Futter","category":"food","amount":"10.10","refund":""}).status_code,303)
+        for invalid in ({"amount":"-1"},{"amount":"1.001"},{"amount":"NaN"},{"refund":"999"},
+                        {"pet_id":other},{"category":"bad"},{"day":"2026-02-30"}):
+            self.assertEqual(self.post("/costs/new",**{**data,**invalid}).status_code,200)
+        page=self.client.get("/costs?year=2026&pet="+pid)
+        self.assertIn("125,50 €".encode(),page.data)
+        self.assertIn("75,25 €".encode(),page.data)
+        self.assertNotIn(b"Futter</h3>",page.data)
+        self.assertIn(b"Praxis",page.data)
+        self.assertIn("135,60 €".encode(),self.client.get("/costs?year=all").data)
+        self.assertEqual(self.post("/costs/1/edit",**{**data,"refund":"100"}).status_code,303)
+        self.assertIn("25,50 €".encode(),self.client.get("/costs?year=2026").data)
+        self.assertEqual(self.post("/costs/1/delete",confirm="yes").status_code,303)
+        self.assertNotIn(b"Praxis",self.client.get("/costs?year=2026").data)
+        self.assertEqual(self.client.get("/costs/1/edit").status_code,404)
+        self.assertEqual(self.client.get("/costs?year=invalid").status_code,400)
+        self.assertEqual(self.client.post("/costs/new",data=data).status_code,403)
+
+    def test_pdf_download_is_private(self):
+        a=self.pet("Müller & Katze")
+        self.assertEqual(self.post(a+"/records/new",kind="exam",title="Lunge < Befund",
+                                  day="2026-11-20",notes="Zeile & Text\n"+"Beschreibung "*1500).status_code,200)
+        self.assertEqual(self.post(a+"/records/new",kind="exam",title="Lunge < Befund",
+                                  day="2026-11-20",notes="Zeile & Text\n"+"Beschreibung "*650).status_code,303)
+        pdf=self.client.get(a+"/health-record.pdf")
+        self.assertEqual(pdf.status_code,200)
+        self.assertEqual(pdf.mimetype,"application/pdf")
+        self.assertTrue(pdf.data.startswith(b"%PDF-"))
+        self.assertIn("attachment",pdf.headers["Content-Disposition"])
+        self.assertEqual(self.app.test_client().get(a+"/health-record.pdf").status_code,303)
+        self.assertEqual(self.client.get("/pets/99999/health-record.pdf").status_code,404)
+        self.assertIn(b"theme-choice",self.client.get("/settings").data)
+
+    def test_legacy_schema_one_backup_import(self):
+        import sqlite3,json,zipfile
+        from pathlib import Path
+        from backups import create_portable_backup
+        self.pet("Legacy")
+        root=Path(self.tmp.name)
+        legacy=root/"legacy.sqlite3"
+        source=sqlite3.connect(root/"petdiary.sqlite3")
+        dest=sqlite3.connect(legacy)
+        source.backup(dest)
+        source.close()
+        with dest:
+            dest.execute("DROP TABLE costs")
+            dest.execute("PRAGMA user_version=1")
+        dest.close()
+        temporary,archive,counts=create_portable_backup(legacy,root,"0.0.5")
+        try:
+            data=archive.read_bytes()
+            with zipfile.ZipFile(io.BytesIO(data)) as z:
+                self.assertEqual(json.loads(z.read("manifest.json"))["schema_version"],1)
+        finally:
+            temporary.cleanup()
+        self.assertEqual(self.post("/costs/new",pet_id="1",record_id="",day="2026-11-20",
+                                  category="vet",title="Vor Import",amount="3",refund="",notes="").status_code,303)
+        response=self.client.post("/settings/backups/import",
+             data={"csrf":self.csrf,"current_password":self.password,"confirm_text":"ERSETZEN",
+                   "confirm_overwrite":"yes","backup":(io.BytesIO(data),"legacy.zip")},
+             headers={"Accept":"application/json"})
+        self.assertEqual(response.status_code,200,response.get_data(as_text=True))
+        self.assertEqual(response.get_json()["imported"]["costs"],0)
+        self.assertIn(b"Legacy",self.client.get("/").data)
+        self.assertNotIn(b"Vor Import",self.client.get("/costs?year=all").data)
 
 if __name__=="__main__":
     unittest.main()
