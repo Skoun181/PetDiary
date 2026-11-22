@@ -1,11 +1,11 @@
-# 🐾 PetDiary 0.0.5
+# 🐾 PetDiary 0.0.6 – Develop
 
 **Self-hosted · Docker · SQLite · Home Assistant**
 
 
 Private, ressourcenschonende Tiergesundheitsakte für den eigenen Docker-Server. Keine Cloud, kein JavaScript-Framework, keine zusätzliche Datenbank. Deutschsprachige Weboberfläche in Mintgrün und Petrol, inspiriert von modernen Tiergesundheits-Apps.
 
-**Status:** Version 0.0.5 – portabler ZIP-Export und sicherer Import für Serverumzüge. Aktuelle Veröffentlichungen und Versions-Tags unter [GitHub Releases](https://github.com/Skoun181/PetDiary/releases) und [Docker Hub](https://hub.docker.com/r/skoun181/petdiary/tags). Ein lokales Administratorkonto pro Installation; keine Mehrbenutzerverwaltung.
+**Status:** Entwicklungsstand 0.0.6 – Kostenverwaltung, PDF-Gesundheitsakte und Dark Mode. Docker Hub stable/latest bleiben bei 0.0.5, bis ein neues Release veröffentlicht wird. Aktuelle Veröffentlichungen und Versions-Tags unter [GitHub Releases](https://github.com/Skoun181/PetDiary/releases) und [Docker Hub](https://hub.docker.com/r/skoun181/petdiary/tags). Ein lokales Administratorkonto pro Installation; keine Mehrbenutzerverwaltung.
 
 [📖 Bebilderte Bedienungsanleitung](docs/USER_GUIDE.md) · [🏠 Home Assistant](docs/HOME_ASSISTANT.md) · [📦 Backup und Umzug](docs/BACKUP_MIGRATION.md) · [🔑 Passwort zurücksetzen](docs/PASSWORD_RESET.md) · [Änderungen](CHANGELOG.md)
 
@@ -46,6 +46,23 @@ GET /api/v1/medications?days=7 liefert geplante Gaben ab dem heutigen Tag (optio
 
 Der Katalog enthält 607 unterschiedliche Bezeichnungen (einschließlich vorhandener Präparatevarianten). Die bereitgestellten A–Z-Listen umfassen 343 Katzen- und 468 Hundeeinträge, zusammen 540 unterschiedliche Namen. 458 davon wurden neu ergänzt. Gemeinsame Handels- und Wirkstoffnamen werden nur einmal gespeichert. Die Vorschläge der Tierart erscheinen zuerst; Hinweise zeigen die Herkunftsliste und bewahren die Quellmarkierungen für Ergänzungs-/Pflegeprodukte, Humanarzneimittel bzw. mögliche Umwidmung und zu prüfende Varianten. Alle Einträge, auch unmarkierte, sind ungeprüft. Die Listen dienen ausschließlich der nachträglichen Dokumentation, nicht der Therapieauswahl. Freitext und bereits gespeicherte Namen sowie Pläne bleiben erhalten. Keine Dosierungen oder Indikationen aus den Listen übernommen. Permethrinhaltige Hundepräparate können für Katzen lebensgefährlich sein.
 
+## Neue Funktionen in 0.0.6 (Develop)
+
+### Kostenverwaltung
+- Menü **Kosten** öffnen und **+ Kosten** wählen. Tier, Datum, Kategorie, Titel und Eurobetrag angeben.
+- Bereits erhaltene Versicherungserstattung optional erfassen, später bearbeiten; Eigenanteil = Kosten minus Erstattung. Beträge werden als ganze Cent gespeichert.
+- Nach Jahr oder Tier filtern; Gesamtausgaben, Erstattungen, Eigenanteil und Kategorieverteilung ansehen.
+- Rechnungen als PDF/Bild am Akteneintrag hochladen und den Kosteneintrag damit verknüpfen. Kosten können auch ohne Akteneintrag angelegt werden.
+
+### PDF-Gesundheitsakte
+- Tierprofil öffnen und **PDF-Gesundheitsakte** anklicken.
+- Die PDF enthält Profil-/Halterdaten, die chronologische Gesundheitsakte, Impfungen, Befunde, Notizen, Präparate, Medikationspläne und Erinnerungen. Anhänge werden namentlich aufgeführt, nicht eingebettet; Kosten und Zugangsdaten bleiben außen vor.
+- Die PDF wird lokal erzeugt und kann gespeichert, ausgedruckt oder gezielt an eine Tierarztpraxis weitergegeben werden. Kein amtlicher Impfpass.
+
+### Dark Mode
+- Einstellungen → Erscheinungsbild → Design: System, Hell oder Dunkel.
+- Die Auswahl wird im jeweiligen Browser gespeichert. Im Systemmodus folgt die App der Betriebssystemeinstellung.
+
 ## 📦 Backup erstellen, importieren und auf einen anderen Server umziehen (ab 0.0.5)
 
 PetDiary kann die vollständige Tiergesundheitsakte direkt über den Browser als **portable ZIP-Datei** sichern und in einer neuen PetDiary-Instanz wiederherstellen – zum Beispiel bei einem Wechsel von Dockhand auf einen anderen Docker-Host oder in einen frischen LXC-Container. Die Funktion steht ab **Version 0.0.5** unter **Einstellungen → Daten sichern und umziehen** zur Verfügung.
@@ -59,6 +76,7 @@ PetDiary kann die vollständige Tiergesundheitsakte direkt über den Browser als
 | Medikamente, Einzelgaben, dokumentierte Mengen, individuelle Pläne und Abhakstatus | ✅ | Vollständig übernommen |
 | Profilbilder, angehängte Bilder und PDF-Dokumente | ✅ | Vollständig übernommen |
 | Eigene Präparatenamen und gespeicherter Präparatekatalog | ✅ | Übernommen und mit dem aktuellen Grundkatalog ergänzt |
+| Kosteneinträge und Erstattungen (ab 0.0.6) | ✅ | Vollständig übernommen, einschließlich Aktenverknüpfungen |
 | Exportdatum (UTC), App-/Schema-Version, Tabellenanzahlen und SHA-256-Prüfsumme | ✅ | Zur Validierung genutzt |
 | Admin-Benutzername, Konto und Passwort-Hash | ❌ | **Zugangsdaten der Zielinstanz bleiben erhalten** |
 | Home-Assistant-API-Token und gespeicherter Token-Hash | ❌ | **Token der Zielinstanz bleibt erhalten** |
@@ -67,6 +85,8 @@ PetDiary kann die vollständige Tiergesundheitsakte direkt über den Browser als
 | Host-Port, Firewall, HTTPS-Proxy, .env und andere Servereinstellungen | ❌ | Bei Bedarf separat übernehmen oder neu einrichten |
 
 **Gut zu wissen:** PetDiary speichert sämtliche hochgeladenen Dateien bereits in SQLite. Die ZIP-Datei enthält `petdiary.sqlite3` (bereinigte, konsistente Kopie inklusive Bilder/PDFs) und `manifest.json` (Metadaten/Prüfsumme). Es wird kein zweiter Dateiordner benötigt. Der Export enthält **keine** Zugangsdaten der Quellinstanz, aber weiterhin persönliche Tier- und Halterdaten. Bewahre ihn geschützt auf.
+
+**Backup-Kompatibilität:** 0.0.6 exportiert Schema 2 und kann auch ältere Schema-1-ZIPs (0.0.5) importieren. Beim Import eines alten Backups werden vorhandene Kostendaten der Zielinstanz ersetzt (leer). Schema-2-ZIPs sind nicht in 0.0.5 importierbar. Die browserlokale Designwahl ist nicht Teil des ZIPs.
 
 ### Schritt 1 – Daten in PetDiary exportieren
 
