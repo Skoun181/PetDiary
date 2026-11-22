@@ -34,3 +34,32 @@ h1,h2,h3,p{overflow-wrap:anywhere}h1{font-size:32px;line-height:1.2;letter-spaci
 .backup-result.backup-error{color:#93392d;border-color:#d6a59b;background:#fff1ee}
 .backup-result.backup-success{color:#08604b}
 button[aria-busy="true"]{opacity:.65;cursor:progress}
+
+/* Cost overview */
+.pet-tools{display:flex;flex-wrap:wrap;gap:10px;margin:0 0 18px}
+.cost-totals{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.cost-totals h2{font-size:clamp(18px,3vw,27px);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.cost-filter button{margin-top:8px}
+.cost-bar{margin:15px 0}.cost-bar>div{display:flex;gap:10px;justify-content:space-between;flex-wrap:wrap}
+.cost-bar progress{width:100%;height:12px;accent-color:var(--green)}
+@media(max-width:600px){.cost-totals{grid-template-columns:1fr;gap:0}.section-title h1{font-size:25px}}
+/* Dark palette: use the same semantic colors across all components. */
+:root[data-theme="dark"]{color-scheme:dark;--ink:#e2f2ed;--muted:#a4bdb3;--green:#0b8068;--green-dark:#89ddc5;--mint:#1d4037;--paper:#111c19;--line:#345149;--white:#1c2c27;--orange:#ffc48d;--peach:#493024;--shadow:0 4px 18px #0002}
+[data-theme="dark"] a.button:not(.secondary),[data-theme="dark"] button:not(.secondary):not(.combo-toggle){color:#fff}
+[data-theme="dark"] button:not(.secondary):not(.danger):not(.combo-toggle):hover,[data-theme="dark"] .button:not(.secondary):hover{background:#096950}
+[data-theme="dark"] .secondary,[data-theme="dark"] .date-icon,[data-theme="dark"] .pill,[data-theme="dark"] .chip{background:#27473d;color:#a6e8d4}
+[data-theme="dark"] .secondary:hover,[data-theme="dark"] .chip.selected{background:#376657;color:#fff}
+[data-theme="dark"] .warn{background:var(--peach);color:var(--orange)}
+[data-theme="dark"] input,[data-theme="dark"] select,[data-theme="dark"] textarea,[data-theme="dark"] .combo>input,[data-theme="dark"] .combo-menu{background:#15241f;color:var(--ink);border-color:var(--line)}
+[data-theme="dark"] .combo .combo-toggle,[data-theme="dark"] .combo-option:hover,[data-theme="dark"] .combo-option[aria-selected=true]{background:#315b4d;color:#b0f3df}
+[data-theme="dark"] .combo-info,[data-theme="dark"] .combo-source-hint{color:var(--muted)}
+[data-theme="dark"] .due,[data-theme="dark"] .calendar-day,[data-theme="dark"] .dose-card,[data-theme="dark"] #med-reminder,[data-theme="dark"] .extra-med-card,[data-theme="dark"] .med-summary,[data-theme="dark"] .backup-result{background:#20382f;border-color:var(--line);color:var(--ink)}
+[data-theme="dark"] .med-summary-row{border-color:var(--line)}
+[data-theme="dark"] .calendar-day.is-today,[data-theme="dark"] .dose-card.dose-done{background:#2b483a}
+[data-theme="dark"] .backup-danger,[data-theme="dark"] .backup-result.backup-error,[data-theme="dark"] .alert{background:var(--peach);color:#ffd0ac;border-color:#845841}
+[data-theme="dark"] .backup-result.backup-success{color:#a2efc9}
+[data-theme="dark"] .danger-area{border-color:#855752}
+[data-theme="dark"] .danger-area summary{color:#ffaaa2}
+[data-theme="dark"] #med-reminder summary{color:var(--green-dark)}
+[data-theme="dark"] .avatar.large{background:#31554a}
+@media print{:root[data-theme="dark"]{color-scheme:light;--ink:#183d37;--muted:#5a716a;--paper:#fff;--white:#fff;--line:#dce8e1;--green-dark:#05614f}}
