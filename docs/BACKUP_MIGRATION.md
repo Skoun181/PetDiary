@@ -1,6 +1,6 @@
 # 📦 PetDiary: Datenexport, Import und Serverumzug
 
-**Status:** Ab PetDiary **0.0.5** sind ZIP-Export und -Import im offiziellen Docker-Hub-Image (`skoun181/petdiary:0.0.5` bzw. `stable`) enthalten. Ältere Installationen auf **0.0.4** haben keinen Exportknopf und benötigen den einmaligen Umweg in Abschnitt 6. Der Branch `develop` kann weiterhin separat in einem Testcontainer ausgeführt werden.
+**Status:** Ab PetDiary **0.0.5** sind ZIP-Export und -Import im offiziellen Docker-Hub-Image (`skoun181/petdiary:0.0.6` bzw. `stable`) enthalten. Ältere Installationen auf **0.0.4** haben keinen Exportknopf und benötigen den einmaligen Umweg in Abschnitt 6. Der Branch `develop` kann weiterhin separat in einem Testcontainer ausgeführt werden.
 
 ## 1. Was wird gesichert?
 
@@ -109,7 +109,7 @@ Falls nur die Dockhand-Weboberfläche verfügbar ist und du keinen Docker-Host-Z
 
 1. Quellinstallation sichern – bei 0.0.4 über Abschnitt 6, ab 0.0.5 direkt über **Daten exportieren**.
 2. ZIP auf den neuen Rechner übertragen (z. B. USB oder sichere Dateiübertragung).
-3. Docker Engine/Compose installieren oder in Dockhand einen neuen PetDiary-Stack mit dem veröffentlichten Image **`skoun181/petdiary:0.0.5`** anlegen. Nur für experimentelle Entwicklung `develop` und `compose.develop.yaml` bauen.
+3. Docker Engine/Compose installieren oder in Dockhand einen neuen PetDiary-Stack mit dem veröffentlichten Image **`skoun181/petdiary:0.0.6`** anlegen. Nur für experimentelle Entwicklung `develop` und `compose.develop.yaml` bauen.
 4. **Neues leeres Volume** unter `/data` anlegen, Container starten, Browser-Ersteinrichtung mit neuen Zugangsdaten durchführen.
 5. ZIP über das neue Browserformular importieren, anschließend alle Daten und Dateien prüfen.
 6. Portfreigabe/Reverse Proxy und Home-Assistant-REST-URL bei Bedarf auf die neue IP/Port ändern. Einen neuen API-Token nur erzeugen, wenn noch keiner in der Zielinstanz existiert.

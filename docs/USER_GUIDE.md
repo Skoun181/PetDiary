@@ -1,4 +1,4 @@
-# PetDiary 0.0.6 – Bedienungsanleitung (Develop)
+# PetDiary 0.0.6 – Bedienungsanleitung
 
 [Zurück zur README](../README.md) · [Passwort zurücksetzen](PASSWORD_RESET.md)
 
