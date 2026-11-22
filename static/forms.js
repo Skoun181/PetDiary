@@ -246,7 +246,7 @@ document.querySelectorAll("form[data-backup]").forEach(form=>{
         const data=await response.json();
         const info=data.imported||{};
         status.textContent="✅ Import erfolgreich: "+info.pets+" Tiere, "+info.records+" Akteneinträge, "+
-          info.attachments+" Anhänge und "+info.pet_photos+" Profilbilder. Interne Sicherheitskopie: "+
+          info.attachments+" Anhänge, "+info.costs+" Kosteneinträge und "+info.pet_photos+" Profilbilder. Interne Sicherheitskopie: "+
           data.safety_backup+". Die neue Akte ist sofort verfügbar.";
         form.reset();
       }
