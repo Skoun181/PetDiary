@@ -20,6 +20,12 @@ CREATE TABLE IF NOT EXISTS costs (
  notes TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS costs_pet_day ON costs(pet_id,day);
+CREATE TABLE IF NOT EXISTS cost_records (
+ cost_id INTEGER NOT NULL REFERENCES costs(id) ON DELETE CASCADE,
+ record_id INTEGER NOT NULL REFERENCES records(id) ON DELETE CASCADE,
+ PRIMARY KEY(cost_id,record_id)
+);
+CREATE INDEX IF NOT EXISTS cost_records_record ON cost_records(record_id);
 """
 
 def parse_cents(value, optional=False):

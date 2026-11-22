@@ -52,7 +52,7 @@ Der Katalog enthält 607 unterschiedliche Bezeichnungen (einschließlich vorhand
 - Menü **Kosten** öffnen und **+ Kosten** wählen. Tier, Datum, Kategorie, Titel und Eurobetrag angeben.
 - Bereits erhaltene Versicherungserstattung optional erfassen, später bearbeiten; Eigenanteil = Kosten minus Erstattung. Beträge werden als ganze Cent gespeichert.
 - Nach Jahr oder Tier filtern; Gesamtausgaben, Erstattungen, Eigenanteil und Kategorieverteilung ansehen.
-- Rechnungen als PDF/Bild am Akteneintrag hochladen und den Kosteneintrag damit verknüpfen. Kosten können auch ohne Akteneintrag angelegt werden.
+- Rechnungen als PDF/Bild am Akteneintrag hochladen und im Kostenformular mehrere Akteneinträge desselben Tieres per Checkbox auswählen (z. B. Impfung, Entwurmung und Medikamente auf einer Rechnung). Der Rechnungsbetrag zählt nur einmal. Kosten können auch ohne Akteneintrag angelegt werden.
 
 ### PDF-Gesundheitsakte
 - Tierprofil öffnen und **PDF-Gesundheitsakte** anklicken.
@@ -86,7 +86,7 @@ PetDiary kann die vollständige Tiergesundheitsakte direkt über den Browser als
 
 **Gut zu wissen:** PetDiary speichert sämtliche hochgeladenen Dateien bereits in SQLite. Die ZIP-Datei enthält `petdiary.sqlite3` (bereinigte, konsistente Kopie inklusive Bilder/PDFs) und `manifest.json` (Metadaten/Prüfsumme). Es wird kein zweiter Dateiordner benötigt. Der Export enthält **keine** Zugangsdaten der Quellinstanz, aber weiterhin persönliche Tier- und Halterdaten. Bewahre ihn geschützt auf.
 
-**Backup-Kompatibilität:** 0.0.6 exportiert Schema 2 und kann auch ältere Schema-1-ZIPs (0.0.5) importieren. Beim Import eines alten Backups werden vorhandene Kostendaten der Zielinstanz ersetzt (leer). Schema-2-ZIPs sind nicht in 0.0.5 importierbar. Die browserlokale Designwahl ist nicht Teil des ZIPs.
+**Backup-Kompatibilität:** 0.0.6 exportiert Schema 3 und kann ältere Schema-1-ZIPs (0.0.5) und Schema-2-ZIPs (früherer 0.0.6-Stand) importieren. Bestehende Einzelverknüpfungen werden automatisch migriert. Beim Import eines alten Backups werden vorhandene Kostendaten der Zielinstanz ersetzt (leer). Schema-3-ZIPs sind nicht in älteren Versionen importierbar. Die browserlokale Designwahl ist nicht Teil des ZIPs.
 
 ### Schritt 1 – Daten in PetDiary exportieren
 

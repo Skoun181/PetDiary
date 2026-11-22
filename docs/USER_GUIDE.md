@@ -131,7 +131,7 @@ Unter **Einstellungen → Daten sichern und umziehen** lässt sich ein portables
 
 ## Kosten (0.0.6)
 
-Öffne Kosten → + Kosten. Erfasse Tier, Datum, Kategorie, Beschreibung und Betrag in EUR. Bereits erhaltene Erstattung ist optional; der Eigenanteil wird automatisch berechnet. Lade Rechnungen am Akteneintrag hoch und verknüpfe diesen im Kostenformular. Filtere die Übersicht nach Tier und Jahr. Einträge können bearbeitet oder gelöscht werden.
+Öffne Kosten → + Kosten. Erfasse Tier, Datum, Kategorie, Beschreibung und Betrag in EUR. Bereits erhaltene Erstattung ist optional; der Eigenanteil wird automatisch berechnet. Lade Rechnungen am Akteneintrag hoch und wähle im Kostenformular mehrere Akteneinträge desselben Tieres per Checkbox aus. Der Betrag wird nur einmal erfasst. Filtere die Übersicht nach Tier und Jahr. Einträge können bearbeitet oder gelöscht werden.
 
 ## PDF-Gesundheitsakte
 

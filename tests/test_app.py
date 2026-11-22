@@ -316,11 +316,12 @@ class PetDiaryTest(unittest.TestCase):
             self.assertEqual(set(archive.namelist()),{"manifest.json","petdiary.sqlite3"})
             meta=json.loads(archive.read("manifest.json"))
             raw=archive.read("petdiary.sqlite3")
-            self.assertEqual(meta["schema_version"],2)
+            self.assertEqual(meta["schema_version"],3)
             self.assertEqual(meta["app_version"],"0.0.6")
             self.assertEqual(hashlib.sha256(raw).hexdigest(),meta["database_sha256"])
             self.assertEqual(meta["counts"]["attachments"],1)
             self.assertEqual(meta["counts"]["costs"],1)
+            self.assertEqual(meta["counts"]["cost_records"],1)
             self.assertNotIn(secret.encode(),raw)
             self.assertNotIn(tokenhash.encode(),raw)
             self.assertNotIn(pwdhash.encode(),raw)
@@ -330,7 +331,7 @@ class PetDiaryTest(unittest.TestCase):
                 self.assertEqual(con.execute("SELECT count(*) FROM admin_account").fetchone()[0],0)
                 self.assertEqual(con.execute("SELECT count(*) FROM app_settings").fetchone()[0],0)
                 self.assertEqual(con.execute("SELECT count(*) FROM attachments").fetchone()[0],1)
-                self.assertEqual(con.execute("PRAGMA user_version").fetchone()[0],2)
+                self.assertEqual(con.execute("PRAGMA user_version").fetchone()[0],3)
         with tempfile.TemporaryDirectory() as newdir:
             newapp=create_app(dict(TESTING=True,DATA_DIR=newdir))
             other=newapp.test_client()
@@ -474,6 +475,63 @@ class PetDiaryTest(unittest.TestCase):
         self.assertEqual(self.client.get("/costs?year=invalid").status_code,400)
         self.assertEqual(self.client.post("/costs/new",data=data).status_code,403)
 
+    def test_multiple_cost_links_and_legacy_migration(self):
+        import sqlite3
+        from pathlib import Path
+        from backups import create_portable_backup
+        a=self.pet("Mehrfach")
+        b=self.pet("Anderes Tier")
+        for url,title in ((a,"Impfung A"),(a,"Entwurmung B"),(b,"Fremd C")):
+            self.assertEqual(self.post(url+"/records/new",kind="visit",title=title,day="2026-11-20").status_code,303)
+        data=dict(pet_id=a.split("/")[-1],record_id=["1","2","2"],day="2026-11-20",
+                  category="vet",title="Sammelrechnung",amount="120",refund="20",notes="")
+        self.assertEqual(self.post("/costs/new",**data).status_code,303)
+        view=self.client.get("/costs?year=all").data
+        self.assertIn(b"Impfung A",view)
+        self.assertIn(b"Entwurmung B",view)
+        self.assertIn("120,00 €".encode(),view)
+        self.assertNotIn("240,00 €".encode(),view)
+        self.assertEqual(self.post("/costs/1/edit",**{**data,"record_id":["1","3"]}).status_code,200)
+        root=Path(self.tmp.name)
+        dbpath=root/"petdiary.sqlite3"
+        with sqlite3.connect(dbpath) as con:
+            self.assertEqual(con.execute("SELECT record_id FROM cost_records ORDER BY record_id").fetchall(),[(1,),(2,)])
+        exported=self.make_portable_backup()
+        self.assertEqual(self.post("/costs/1/edit",**{**data,"record_id":["2"]}).status_code,303)
+        result=self.client.post("/settings/backups/import",data={"csrf":self.csrf,"current_password":self.password,
+            "confirm_text":"ERSETZEN","confirm_overwrite":"yes","backup":(io.BytesIO(exported),"multi.zip")},
+            headers={"Accept":"application/json"})
+        self.assertEqual(result.status_code,200,result.get_data(as_text=True))
+        with sqlite3.connect(dbpath) as con:
+            self.assertEqual(con.execute("SELECT record_id FROM cost_records ORDER BY record_id").fetchall(),[(1,),(2,)])
+        # Simulate an older 0.0.6 single-link backup.
+        legacy=root/"legacy2.sqlite3"
+        src=sqlite3.connect(dbpath)
+        dst=sqlite3.connect(legacy)
+        src.backup(dst)
+        src.close()
+        with dst:
+            dst.execute("DROP TABLE cost_records")
+            dst.execute("UPDATE costs SET record_id=1")
+            dst.execute("PRAGMA user_version=2")
+        dst.close()
+        temporary,archive,_=create_portable_backup(legacy,root,"0.0.6")
+        try:
+            payload=archive.read_bytes()
+        finally:
+            temporary.cleanup()
+        result=self.client.post("/settings/backups/import",data={"csrf":self.csrf,"current_password":self.password,
+            "confirm_text":"ERSETZEN","confirm_overwrite":"yes","backup":(io.BytesIO(payload),"legacy2.zip")},
+            headers={"Accept":"application/json"})
+        self.assertEqual(result.status_code,200,result.get_data(as_text=True))
+        with sqlite3.connect(dbpath) as con:
+            self.assertEqual(con.execute("SELECT record_id FROM cost_records").fetchall(),[(1,)])
+            self.assertEqual(con.execute("SELECT cents,record_id FROM costs").fetchone(),(12000,None))
+        # Starting an existing single-link database also migrates it once.
+        create_app(dict(TESTING=True,DATA_DIR=str(root)))
+        with sqlite3.connect(dbpath) as con:
+            self.assertEqual(con.execute("SELECT record_id FROM cost_records").fetchall(),[(1,)])
+    
     def test_pdf_download_is_private(self):
         a=self.pet("Müller & Katze")
         self.assertEqual(self.post(a+"/records/new",kind="exam",title="Lunge < Befund",
@@ -501,6 +559,7 @@ class PetDiaryTest(unittest.TestCase):
         source.backup(dest)
         source.close()
         with dest:
+            dest.execute("DROP TABLE cost_records")
             dest.execute("DROP TABLE costs")
             dest.execute("PRAGMA user_version=1")
         dest.close()

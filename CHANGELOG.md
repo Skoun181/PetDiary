@@ -5,7 +5,7 @@
 - Kostenverwaltung je Tier mit Kategorien, Jahresfilter, Erstattungen, Eigenanteil, Diagrammbalken und optionaler Verknüpfung zu Akteneinträgen/Rechnungsanhängen.
 - Lokal generiertes PDF der Gesundheitsakte pro Tier; Anhänge namentlich aufgeführt, keine eingebetteten Dateien.
 - Hell/Dunkel/System, browserlokal gespeichert.
-- SQLite-Schema 2: additive Kostentabelle; Backup und Import der Kostendaten, weiterhin Import von Schema-1-ZIPs. Keine Änderung an Stable/Docker Hub bis zur Freigabe.
+- SQLite-Schema 3: mehrere Aktenverknüpfungen pro Kosteneintrag, einmalige Betragszählung, Migration bestehender Einzelverknüpfungen; Backup und Import einschließlich aller Verknüpfungen; ältere Schema-1/2-ZIPs bleiben importierbar. Keine Änderung an Stable/Docker Hub bis zur Freigabe.
 
 ## 0.0.5 – Portables Backup, Import und Serverumzug
 

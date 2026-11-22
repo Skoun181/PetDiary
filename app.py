@@ -86,7 +86,10 @@ def create_app(config=None):
         if "parent_id" not in {row["name"] for row in con.execute("PRAGMA table_info(records)")}:
             con.execute("ALTER TABLE records ADD COLUMN parent_id INTEGER REFERENCES records(id) ON DELETE CASCADE")
         con.execute("CREATE INDEX IF NOT EXISTS records_parent ON records(parent_id)")
-        con.execute("PRAGMA user_version=2")
+        # Migrate the previous single record link without touching the invoice amount.
+        con.execute("INSERT OR IGNORE INTO cost_records(cost_id,record_id) SELECT id,record_id FROM costs WHERE record_id IS NOT NULL")
+        con.execute("UPDATE costs SET record_id=NULL WHERE record_id IS NOT NULL")
+        con.execute("PRAGMA user_version=3")
         con.executemany("INSERT OR IGNORE INTO products(name) VALUES (?)",[(p,) for p in PRODUCTS])
         con.execute("INSERT OR IGNORE INTO app_settings VALUES ('session_secret',?)",(secrets.token_hex(32),))
         app.secret_key=con.execute("SELECT value FROM app_settings WHERE key='session_secret'").fetchone()[0]
@@ -512,11 +515,16 @@ def create_app(config=None):
         with db() as con:
             pets=[dict(p) for p in con.execute("SELECT id,name FROM pets ORDER BY name,id")]
             if pid and pid not in {str(p["id"]) for p in pets}: abort(404)
-            query="SELECT c.*,p.name AS pet_name,r.title AS record_title FROM costs c JOIN pets p ON p.id=c.pet_id LEFT JOIN records r ON r.id=c.record_id WHERE 1=1"
+            query="SELECT c.*,p.name AS pet_name FROM costs c JOIN pets p ON p.id=c.pet_id WHERE 1=1"
             args=[]
             if year!="all": query+=" AND substr(c.day,1,4)=?";args.append(year)
             if pid: query+=" AND c.pet_id=?";args.append(int(pid))
             entries=[dict(r) for r in con.execute(query+" ORDER BY c.day DESC,c.id DESC",args)]
+            links={}
+            for link in con.execute("SELECT cr.cost_id,r.id,r.title,r.day,r.kind FROM cost_records cr JOIN records r ON r.id=cr.record_id ORDER BY r.day DESC,r.id DESC"):
+                links.setdefault(link["cost_id"],[]).append(dict(link))
+            for entry in entries:
+                entry["records"]=links.get(entry["id"],[])
             years=sorted({str(today().year),*(r[0] for r in con.execute("SELECT DISTINCT substr(day,1,4) FROM costs")), *({year} if year!="all" else set())},reverse=True)
         total=sum(r["cents"] for r in entries)
         reimbursed=sum(r["reimbursed"] for r in entries)
@@ -528,30 +536,35 @@ def create_app(config=None):
     def cost_edit(cid=None):
         with db() as con:
             pets=[dict(p) for p in con.execute("SELECT id,name FROM pets ORDER BY name,id")]
-            records=[dict(r) for r in con.execute("SELECT r.id,r.pet_id,r.day,r.title,p.name AS pet_name FROM records r JOIN pets p ON p.id=r.pet_id WHERE r.parent_id IS NULL ORDER BY r.day DESC,r.id DESC")]
+            records=[dict(r) for r in con.execute("SELECT r.id,r.pet_id,r.day,r.title,r.kind,p.name AS pet_name FROM records r JOIN pets p ON p.id=r.pet_id WHERE r.parent_id IS NULL ORDER BY r.day DESC,r.id DESC")]
             if cid is not None:
                 entry=item(con,"costs",cid)
+                entry["record_ids"]=[str(r[0]) for r in con.execute("SELECT record_id FROM cost_records WHERE cost_id=?",(cid,))]
                 entry["amount"]=input_euro(entry["cents"])
                 entry["refund"]=input_euro(entry["reimbursed"])
             else:
-                entry=dict(pet_id=request.args.get("pet",str(pets[0]["id"]) if pets else ""),record_id=request.args.get("record",""),day=today().isoformat(),category="vet",title="",amount="",refund="",notes="")
+                entry=dict(pet_id=request.args.get("pet") or (str(pets[0]["id"]) if pets else ""),record_ids=request.args.getlist("record"),day=today().isoformat(),category="vet",title="",amount="",refund="",notes="")
             if request.method=="POST":
-                entry={k:request.form.get(k,"").strip() for k in ("pet_id","record_id","day","category","title","amount","refund","notes")}
+                entry={k:request.form.get(k,"").strip() for k in ("pet_id","day","category","title","amount","refund","notes")}
+                entry["record_ids"]=list(dict.fromkeys(v for v in request.form.getlist("record_id") if v))
                 try:
                     if entry["pet_id"] not in {str(p["id"]) for p in pets}: raise ValueError("Bitte ein Tier auswählen.")
-                    if entry["record_id"] and not any(str(r["id"])==entry["record_id"] and str(r["pet_id"])==entry["pet_id"] for r in records):
-                        raise ValueError("Der verknüpfte Akteneintrag muss zum ausgewählten Tier gehören.")
+                    allowed={str(r["id"]) for r in records if str(r["pet_id"])==entry["pet_id"]}
+                    if not set(entry["record_ids"]).issubset(allowed):
+                        raise ValueError("Alle verknüpften Akteneinträge müssen zum ausgewählten Tier gehören.")
                     if entry["category"] not in COST_CATEGORIES: raise ValueError("Ungültige Kostenkategorie.")
                     if not 1<=len(entry["title"])<=300 or len(entry["notes"])>10000: raise ValueError("Titel (1–300 Zeichen) und Notizen (max. 10000 Zeichen) prüfen.")
                     day=date.fromisoformat(entry["day"]).isoformat()
                     amount=parse_cents(entry["amount"])
                     refund=parse_cents(entry["refund"],optional=True)
                     if amount<=0 or refund>amount: raise ValueError("Kosten müssen positiv sein; Erstattung darf die Kosten nicht überschreiten.")
-                    args=(int(entry["pet_id"]),int(entry["record_id"]) if entry["record_id"] else None,day,entry["category"],entry["title"],amount,refund,entry["notes"])
+                    args=(int(entry["pet_id"]),None,day,entry["category"],entry["title"],amount,refund,entry["notes"])
                     if cid is None:
-                        con.execute("INSERT INTO costs(pet_id,record_id,day,category,title,cents,reimbursed,notes) VALUES (?,?,?,?,?,?,?,?)",args)
+                        cid=con.execute("INSERT INTO costs(pet_id,record_id,day,category,title,cents,reimbursed,notes) VALUES (?,?,?,?,?,?,?,?)",args).lastrowid
                     else:
                         con.execute("UPDATE costs SET pet_id=?,record_id=?,day=?,category=?,title=?,cents=?,reimbursed=?,notes=? WHERE id=?",(*args,cid))
+                    con.execute("DELETE FROM cost_records WHERE cost_id=?",(cid,))
+                    con.executemany("INSERT INTO cost_records(cost_id,record_id) VALUES (?,?)",((cid,int(rid)) for rid in entry["record_ids"]))
                     flash("Kosten gespeichert.")
                     return redirect(url_for("costs",year=day[:4],pet=entry["pet_id"]),303)
                 except ValueError as error:
