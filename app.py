@@ -14,6 +14,8 @@ from flask import Flask, abort, request, render_template, redirect, url_for, jso
 from io import BytesIO
 from flask import send_file
 from backups import BackupError, MAX_ARCHIVE_BYTES, create_portable_backup, restore_portable_backup
+from finance import COST_SCHEMA, COST_CATEGORIES, parse_cents, euro, input_euro
+from health_report import health_pdf
 from catalog import BREEDS, COLORS, SEX, CHIP_LOCATIONS, TATTOO_LOCATIONS, PRODUCTS, product_suggestions
 
 CATEGORIES = {"visit":"Termin", "vaccine":"Impfung", "exam":"Untersuchung", "lab":"Labor/Befund", "med":"Medikament", "worm":"Entwurmung", "weight":"Gewicht", "food":"Ernährung", "note":"Notiz", "reminder":"Erinnerung", "titer":"Tollwut-Antikörpertest", "parasite":"Parasitenbehandlung"}
@@ -74,7 +76,7 @@ def create_app(config=None):
 
     with db() as con:
         con.execute("PRAGMA journal_mode=WAL")
-        con.executescript(SCHEMA)
+        con.executescript(SCHEMA+COST_SCHEMA)
         con.execute("BEGIN IMMEDIATE")
         for table, additions in (("pets", ("features","tattoo_location")), ("records", ("dose","dose_unit","duration","dose_times"))):
             known={row["name"] for row in con.execute("PRAGMA table_info("+table+")")}
@@ -84,7 +86,7 @@ def create_app(config=None):
         if "parent_id" not in {row["name"] for row in con.execute("PRAGMA table_info(records)")}:
             con.execute("ALTER TABLE records ADD COLUMN parent_id INTEGER REFERENCES records(id) ON DELETE CASCADE")
         con.execute("CREATE INDEX IF NOT EXISTS records_parent ON records(parent_id)")
-        con.execute("PRAGMA user_version=1")
+        con.execute("PRAGMA user_version=2")
         con.executemany("INSERT OR IGNORE INTO products(name) VALUES (?)",[(p,) for p in PRODUCTS])
         con.execute("INSERT OR IGNORE INTO app_settings VALUES ('session_secret',?)",(secrets.token_hex(32),))
         app.secret_key=con.execute("SELECT value FROM app_settings WHERE key='session_secret'").fetchone()[0]
@@ -287,7 +289,7 @@ def create_app(config=None):
             counts,safety=restore_portable_backup(request.files.get("backup"),path,folder,PRODUCTS)
             summary={"pets":counts["pets"],"records":counts["records"],
                      "attachments":counts["attachments"],"pet_photos":counts["pet_photos"],
-                     "dose_checks":counts["dose_checks"]}
+                     "dose_checks":counts["dose_checks"],"costs":counts["costs"]}
             if "application/json" in request.headers.get("Accept",""):
                 return jsonify(ok=True,imported=summary,safety_backup=safety),200
             flash(f"Import erfolgreich: {summary['pets']} Tiere, {summary['records']} Akteneinträge und {summary['attachments']} Anhänge. Sicherheitskopie: {safety}")
@@ -310,7 +312,7 @@ def create_app(config=None):
         return r
 
     def page(screen, **kwargs):
-        return render_template("index.html",screen=screen,categories=CATEGORIES,csrf=csrf(),today=today().isoformat(),breeds=BREEDS,colors=COLORS,sex_options=SEX,chip_locations=CHIP_LOCATIONS,tattoo_locations=TATTOO_LOCATIONS,**kwargs)
+        return render_template("index.html",screen=screen,categories=CATEGORIES,csrf=csrf(),today=today().isoformat(),cost_categories=COST_CATEGORIES,euro=euro,input_euro=input_euro,breeds=BREEDS,colors=COLORS,sex_options=SEX,chip_locations=CHIP_LOCATIONS,tattoo_locations=TATTOO_LOCATIONS,**kwargs)
 
     def item(con,table,pk):
         # table is chosen solely by server code
@@ -500,6 +502,82 @@ def create_app(config=None):
         elif category in CATEGORIES:
             records=[r for r in records if r["kind"]==category or (category=="med" and r["medicines"])]
         return page("pet",pet=pet,records=records,tab=tab,category=category)
+
+    @app.get("/costs")
+    def costs():
+        year=request.args.get("year",str(today().year))
+        if year!="all" and (not year.isascii() or not year.isdecimal() or len(year)!=4 or not 1<=int(year)<=9999):
+            abort(400)
+        pid=request.args.get("pet","")
+        with db() as con:
+            pets=[dict(p) for p in con.execute("SELECT id,name FROM pets ORDER BY name,id")]
+            if pid and pid not in {str(p["id"]) for p in pets}: abort(404)
+            query="SELECT c.*,p.name AS pet_name,r.title AS record_title FROM costs c JOIN pets p ON p.id=c.pet_id LEFT JOIN records r ON r.id=c.record_id WHERE 1=1"
+            args=[]
+            if year!="all": query+=" AND substr(c.day,1,4)=?";args.append(year)
+            if pid: query+=" AND c.pet_id=?";args.append(int(pid))
+            entries=[dict(r) for r in con.execute(query+" ORDER BY c.day DESC,c.id DESC",args)]
+            years=sorted({str(today().year),*(r[0] for r in con.execute("SELECT DISTINCT substr(day,1,4) FROM costs")), *({year} if year!="all" else set())},reverse=True)
+        total=sum(r["cents"] for r in entries)
+        reimbursed=sum(r["reimbursed"] for r in entries)
+        breakdown=[dict(label=label,cents=sum(r["cents"] for r in entries if r["category"]==key)) for key,label in COST_CATEGORIES.items()]
+        return page("costs",entries=entries,pets=pets,year=year,years=years,pid=pid,total=total,reimbursed=reimbursed,breakdown=breakdown)
+
+    @app.route("/costs/new",methods=["GET","POST"])
+    @app.route("/costs/<int:cid>/edit",methods=["GET","POST"])
+    def cost_edit(cid=None):
+        with db() as con:
+            pets=[dict(p) for p in con.execute("SELECT id,name FROM pets ORDER BY name,id")]
+            records=[dict(r) for r in con.execute("SELECT r.id,r.pet_id,r.day,r.title,p.name AS pet_name FROM records r JOIN pets p ON p.id=r.pet_id WHERE r.parent_id IS NULL ORDER BY r.day DESC,r.id DESC")]
+            if cid is not None:
+                entry=item(con,"costs",cid)
+                entry["amount"]=input_euro(entry["cents"])
+                entry["refund"]=input_euro(entry["reimbursed"])
+            else:
+                entry=dict(pet_id=request.args.get("pet",str(pets[0]["id"]) if pets else ""),record_id=request.args.get("record",""),day=today().isoformat(),category="vet",title="",amount="",refund="",notes="")
+            if request.method=="POST":
+                entry={k:request.form.get(k,"").strip() for k in ("pet_id","record_id","day","category","title","amount","refund","notes")}
+                try:
+                    if entry["pet_id"] not in {str(p["id"]) for p in pets}: raise ValueError("Bitte ein Tier auswählen.")
+                    if entry["record_id"] and not any(str(r["id"])==entry["record_id"] and str(r["pet_id"])==entry["pet_id"] for r in records):
+                        raise ValueError("Der verknüpfte Akteneintrag muss zum ausgewählten Tier gehören.")
+                    if entry["category"] not in COST_CATEGORIES: raise ValueError("Ungültige Kostenkategorie.")
+                    if not 1<=len(entry["title"])<=300 or len(entry["notes"])>10000: raise ValueError("Titel (1–300 Zeichen) und Notizen (max. 10000 Zeichen) prüfen.")
+                    day=date.fromisoformat(entry["day"]).isoformat()
+                    amount=parse_cents(entry["amount"])
+                    refund=parse_cents(entry["refund"],optional=True)
+                    if amount<=0 or refund>amount: raise ValueError("Kosten müssen positiv sein; Erstattung darf die Kosten nicht überschreiten.")
+                    args=(int(entry["pet_id"]),int(entry["record_id"]) if entry["record_id"] else None,day,entry["category"],entry["title"],amount,refund,entry["notes"])
+                    if cid is None:
+                        con.execute("INSERT INTO costs(pet_id,record_id,day,category,title,cents,reimbursed,notes) VALUES (?,?,?,?,?,?,?,?)",args)
+                    else:
+                        con.execute("UPDATE costs SET pet_id=?,record_id=?,day=?,category=?,title=?,cents=?,reimbursed=?,notes=? WHERE id=?",(*args,cid))
+                    flash("Kosten gespeichert.")
+                    return redirect(url_for("costs",year=day[:4],pet=entry["pet_id"]),303)
+                except ValueError as error:
+                    flash(str(error))
+        return page("cost_edit",entry=entry,cid=cid,pets=pets,records=records)
+
+    @app.post("/costs/<int:cid>/delete")
+    def cost_delete(cid):
+        if request.form.get("confirm")!="yes": abort(400)
+        with db() as con:
+            item(con,"costs",cid)
+            con.execute("DELETE FROM costs WHERE id=?",(cid,))
+        flash("Kosteneintrag gelöscht.")
+        return redirect(url_for("costs"),303)
+
+    @app.get("/pets/<int:pid>/health-record.pdf")
+    def pet_pdf(pid):
+        with db() as con:
+            con.execute("BEGIN")
+            pet=item(con,"pets",pid)
+            records=[dict(r) for r in con.execute("SELECT * FROM records WHERE pet_id=? ORDER BY day DESC,id DESC",(pid,))]
+            attachments={}
+            for a in con.execute("SELECT a.record_id,a.name FROM attachments a JOIN records r ON r.id=a.record_id WHERE r.pet_id=? ORDER BY a.id",(pid,)):
+                attachments.setdefault(a["record_id"],[]).append(a["name"])
+            checks={r[0]:r[1] for r in con.execute("SELECT d.record_id,count(*) FROM dose_checks d JOIN records r ON r.id=d.record_id WHERE r.pet_id=? GROUP BY d.record_id",(pid,))}
+        return send_file(health_pdf(pet,records,attachments,checks,CATEGORIES,today().isoformat()),mimetype="application/pdf",as_attachment=True,download_name=f"PetDiary-Gesundheitsakte-{pid}-{today().isoformat()}.pdf")
 
     def read_files():
         uploads=[]
