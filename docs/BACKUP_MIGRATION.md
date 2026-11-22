@@ -10,7 +10,8 @@ Die portable Datei `petdiary-backup-YYYY-MM-DD-HHMMSS.zip` enthält:
 - Alle Akteneinträge, Impf- und Arzttermine, Medikamente, Einnahmepläne und Erledigt-Häkchen.
 - Profilfotos sowie hochgeladene Bilder und PDF-Anhänge. Diese liegen bereits als BLOBs in SQLite; es gibt aktuell kein weiteres Upload-Verzeichnis.
 - Eigene Präparate und den lokal gespeicherten Katalog.
-- Eine `manifest.json` mit Erstellungsdatum in UTC, App-Version, Schema-Version 1, Tabellen-Zählwerten und SHA-256-Prüfsumme.
+- Ab 0.0.6: Kosteneinträge, Erstattungen und zugehörige Aktenverknüpfungen. Browserlokale Designwahl und generierte Gesundheitsakten-PDFs werden nicht gespeichert/exportiert.
+- Eine `manifest.json` mit Erstellungsdatum in UTC, App-Version, Schema-Version (1 bei 0.0.5, 2 bei 0.0.6), Tabellen-Zählwerten und SHA-256-Prüfsumme.
 - Eine mit der SQLite-Online-Backup-API erstellte konsistente Datenbankkopie.
 
 **Nicht enthalten:** Administratorkonto, Benutzername, Passwort-Hash, API-Token/-Hash, Sitzungsschlüssel oder andere `app_settings`. Vor dem Verpacken werden diese Daten aus der kopierten SQLite-Datei entfernt; anschließend wird die Kopie per `VACUUM` bereinigt. Die eigentliche Instanz bleibt unberührt. Ein Export enthält trotzdem personenbezogene Angaben, Tier-/Halterdaten und vertrauliche Behandlungsdokumentation: Datei sicher aufbewahren.
@@ -172,9 +173,14 @@ Danach `/healthz`, Anmeldung und alle Tierakten prüfen. PetDiary bewahrt automa
 ## 9. Technische Grenzen und Sicherheit
 
 - ZIP: maximal 256 MiB komprimiert, SQLite maximal 1 GiB entpackt; Dateinamen sind auf die zwei erwarteten Archivmitglieder beschränkt, ZIP-Symlinks, außergewöhnlich starke Komprimierung und verschlüsselte Einträge werden abgewiesen.
-- Serverseitige Validierung: Schema-Version 1, App-Version-Metadaten, SHA-256, CRC beim Lesen, SQLite-`integrity_check`, Fremdschlüssel und Tabellenstruktur. Freitextinhalte werden beim Import nicht als SQL ausgeführt.
+- Serverseitige Validierung: Schema-Version 1 bzw. 2 (ab 0.0.6), App-Version-Metadaten, SHA-256, CRC beim Lesen, SQLite-`integrity_check`, Fremdschlüssel und Tabellenstruktur. Freitextinhalte werden beim Import nicht als SQL ausgeführt.
 - Die Datenübernahme verwendet eine SQLite-Transaktion. Wenn sie fehlschlägt, bleibt die bisherige Akte erhalten.
 - Export und Import verlangen eine gültige Sitzung, CSRF-Schutz und erneute Eingabe des Adminpassworts. Import zusätzlich eine ausdrückliche Ersetzungsbestätigung.
 - Metadaten und Fehler werden ohne Passwörter, Tokens oder Datei-Inhalte geloggt; detaillierte Serverfehler erscheinen nur in den Logs.
 - Alle persistenten Daten einschließlich Uploads liegen in `/data/petdiary.sqlite3`. Das normale Compose bindet ein benanntes Volume ein. Der Container selbst ist austauschbar.
 - **Kein Merge nach `stable`**, solange dieser Entwicklungsstand nicht vollständig getestet und freigegeben wurde.
+
+
+## Kompatibilität ab 0.0.6
+
+Schema-1-ZIPs aus Version 0.0.5 lassen sich weiterhin importieren. Weil sie keine Kosteneinträge enthalten, wird die Kostenliste beim Ersetzen der Anwendungsdaten geleert. Schema-2-ZIPs aus 0.0.6 enthalten Kosten und Erstattungen und sind nicht für 0.0.5 geeignet. Vor einem Zurückwechseln auf einen älteren Softwarestand ein separates Datenvolume verwenden.
