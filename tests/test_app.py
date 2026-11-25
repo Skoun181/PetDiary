@@ -317,7 +317,7 @@ class PetDiaryTest(unittest.TestCase):
             meta=json.loads(archive.read("manifest.json"))
             raw=archive.read("petdiary.sqlite3")
             self.assertEqual(meta["schema_version"],3)
-            self.assertEqual(meta["app_version"],"0.0.6")
+            self.assertEqual(meta["app_version"],"0.0.7")
             self.assertEqual(hashlib.sha256(raw).hexdigest(),meta["database_sha256"])
             self.assertEqual(meta["counts"]["attachments"],1)
             self.assertEqual(meta["counts"]["costs"],1)
