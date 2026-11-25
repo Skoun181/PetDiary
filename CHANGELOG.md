@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.0.7 – Entwicklung: HTTPS-Zertifikate und Caddy-Integration
+
+- Einstellungen zum geschützten Upload von Fullchain-PEM und passendem privaten PEM-Schlüssel, einschließlich aktueller Admin-Passwortkontrolle und CSRF.
+- Validierung von DNS-Hostname (auch Wildcard-SAN), Gültigkeit, Dateigröße, Schlüsselformat, Schlüssellänge und Zertifikat-/Schlüssel-Zusammengehörigkeit.
+- Atomarer Zertifikatswechsel, getrenntes TLS-Volume mit restriktiven Datei-/Verzeichnisrechten; private Schlüssel niemals in SQLite- oder ZIP-Backups.
+- Optionaler read-only Caddy-HTTPS-Reverse-Proxy mit eigenem Port und automatischem Zertifikats-Neuladen; bestehende HTTP-Konfigurationen bleiben verfügbar.
+- Sicherheits- und Integrationstests, Dokumentation für Dockhand, Synology, DNS, Ports und Erneuerung.
+
+
 ## 0.0.6 – Kosten, Gesundheitsakte als PDF und Dark Mode
 
 - Kostenverwaltung je Tier mit Kategorien, Jahresfilter, Erstattungen, Eigenanteil, Diagrammbalken und optionaler Verknüpfung zu Akteneinträgen/Rechnungsanhängen.

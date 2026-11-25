@@ -44,6 +44,35 @@ jobs:
           done
           docker logs petdiary-smoke
           exit 1
+      - name: Validate and live-smoke optional HTTPS proxy
+        run: |
+          set -euo pipefail
+          docker compose -f deploy/compose.develop.https.yaml config --quiet
+          cat >/tmp/https-override.yaml <<'EOF'
+          services:
+            petdiary:
+              image: petdiary:develop-ci
+          EOF
+          docker compose -f deploy/compose.develop.https.yaml -f /tmp/https-override.yaml up -d --no-build
+          trap 'docker compose -f deploy/compose.develop.https.yaml -f /tmp/https-override.yaml logs --no-color --tail=35 || true; docker compose -f deploy/compose.develop.https.yaml -f /tmp/https-override.yaml down --remove-orphans || true' EXIT
+          openssl req -x509 -newkey rsa:2048 -nodes -days 2 \
+            -keyout /tmp/petdiary-tls.key -out /tmp/petdiary-tls.crt \
+            -subj '/CN=*.example.test' \
+            -addext 'subjectAltName=DNS:*.example.test' \
+            -addext 'basicConstraints=CA:FALSE' >/dev/null 2>&1
+          docker cp /tmp/petdiary-tls.key petdiary-develop:/tmp/privkey.pem
+          docker cp /tmp/petdiary-tls.crt petdiary-develop:/tmp/fullchain.pem
+          docker exec petdiary-develop python -c 'from tls_config import install_certificate; install_certificate("/tls",open("/tmp/fullchain.pem","rb").read(),open("/tmp/privkey.pem","rb").read(),"petdiary.example.test")'
+          for i in $(seq 1 40); do
+            if curl -ksSf --noproxy '*' --resolve petdiary.example.test:4443:127.0.0.1 \
+              https://petdiary.example.test:4443/healthz; then
+              echo "HTTPS Caddy -> PetDiary health check succeeded."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "HTTPS handshake or reverse proxy did not become ready."
+          exit 1
       - name: Cleanup
         if: always()
         run: docker rm -f petdiary-smoke || true

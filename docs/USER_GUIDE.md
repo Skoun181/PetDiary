@@ -140,3 +140,9 @@ Unter **Einstellungen → Daten sichern und umziehen** lässt sich ein portables
 ## Erscheinungsbild
 
 Unter Einstellungen → Erscheinungsbild wähle System, Hell oder Dunkel. Die Auswahl bleibt im jeweiligen Browser gespeichert.
+
+## HTTPS-Zertifikat (Develop 0.0.7)
+
+Unter **Einstellungen → HTTPS / TLS-Zertifikat** kannst du das Fullchain-PEM und den dazugehörigen unverschlüsselten privaten PEM-Schlüssel einer PetDiary-Domain hochladen. PetDiary validiert das Zertifikat und zeigt nur öffentliche Metadaten. Das TLS-Volume ist von der SQLite-Datenbank getrennt und gehört **nicht** zum portablen ZIP-Backup. Für den tatsächlichen HTTPS-Endpunkt muss zusätzlich der mitgelieferte Caddy-Reverse-Proxy im Docker-Stack aktiviert sein. Falls du bereits Synology Reverse Proxy, Nginx Proxy Manager oder Traefik verwendest, richte das Zertifikat vorzugsweise dort ein.
+
+[Ausführliche HTTPS- und Wildcard-Anleitung](HTTPS.md).
