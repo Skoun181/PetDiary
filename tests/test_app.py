@@ -55,6 +55,21 @@ class PetDiaryTest(unittest.TestCase):
         self.assertEqual(self.client.get("/api/v1/reminders",headers=self.auth).status_code,401)
         self.assertEqual(self.client.post("/pets/new",data={"name":"X","species":"Katze"},headers=self.auth).status_code,403)
 
+    def test_login_budget_is_per_client_behind_trusted_proxy(self):
+        app=create_app(dict(TESTING=True,DATA_DIR=self.tmp.name,TRUSTED_PROXY_IPS="192.0.2.10"))
+        client=app.test_client()
+        self.refresh_csrf(client,"/login")
+        env={"REMOTE_ADDR":"192.0.2.10"}
+        form={"csrf":self.csrf,"username":"admin","password":"wrong"}
+        for _ in range(5):
+            self.assertEqual(client.post("/login",data=form,headers={"X-Forwarded-For":"192.0.2.11"},
+                                         environ_overrides=env).status_code,401)
+        self.assertEqual(client.post("/login",data=form,headers={"X-Forwarded-For":"192.0.2.11"},
+                                     environ_overrides=env).status_code,429)
+        self.assertEqual(client.post("/login",data={**form,"password":self.password},
+                                     headers={"X-Forwarded-For":"192.0.2.12"},
+                                     environ_overrides=env).status_code,303)
+
     def test_multi_pet_passport_and_reminders(self):
         a=self.pet("Milo")
         b=self.pet("Luna")

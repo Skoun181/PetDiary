@@ -1,5 +1,6 @@
 import os
 import hmac
+from ipaddress import ip_address
 import secrets
 import hashlib
 import time
@@ -62,6 +63,8 @@ def create_app(config=None):
         app.config.update(config)
     tz = ZoneInfo(app.config["TZ"])
     app.config.setdefault("SETUP_TOKEN", os.getenv("PETDIARY_SETUP_TOKEN", ""))
+    app.config.setdefault("TRUSTED_PROXY_IPS", os.getenv("PETDIARY_TRUSTED_PROXY_IPS", ""))
+    proxies = {ip_address(value.strip()) for value in app.config["TRUSTED_PROXY_IPS"].split(",") if value.strip()}
     folder = Path(app.config["DATA_DIR"])
     folder.mkdir(parents=True, exist_ok=True)
     path = folder / "petdiary.sqlite3"
@@ -207,6 +210,12 @@ def create_app(config=None):
             return redirect(url_for("home"),303)
         if request.method=="POST":
             address = request.remote_addr or "unknown"
+            if proxies:
+                try:
+                    if ip_address(address) in proxies:
+                        address = str(ip_address(request.headers.get("X-Forwarded-For", "").strip()))
+                except ValueError:
+                    pass
             with login_lock:
                 now = time.monotonic()
                 for key, (_, expires) in list(failures.items()):

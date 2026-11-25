@@ -9,6 +9,7 @@ services:
     restart: unless-stopped
     environment:
       COOKIE_SECURE: ${COOKIE_SECURE:-0}
+      PETDIARY_TRUSTED_PROXY_IPS: ${PETDIARY_TRUSTED_PROXY_IPS:-}
     ports:
       - "8081:8080"
     volumes:
