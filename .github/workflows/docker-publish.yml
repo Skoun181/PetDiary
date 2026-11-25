@@ -44,52 +44,6 @@ jobs:
           done
           docker logs petdiary-smoke
           exit 1
-      - name: Validate and live-smoke optional HTTPS proxy
-        run: |
-          set -euo pipefail
-          docker compose -f deploy/compose.develop.https.yaml config --quiet
-          cat >/tmp/https-override.yaml <<'EOF'
-          services:
-            petdiary:
-              image: petdiary:develop-ci
-          EOF
-          docker compose -f deploy/compose.develop.https.yaml -f /tmp/https-override.yaml up -d --no-build
-          trap 'docker compose -f deploy/compose.develop.https.yaml -f /tmp/https-override.yaml logs --no-color --tail=35 || true; docker compose -f deploy/compose.develop.https.yaml -f /tmp/https-override.yaml down --remove-orphans || true' EXIT
-          # Generate a test-only self-signed cert inside the TLS volume.
-          # Docker cp refuses writing into a read-only container, even under /tmp.
-          docker run --rm -i --user 10001:10001 \
-            -v petdiary-develop-tls:/tls --entrypoint python petdiary:develop-ci - <<'PY'
-          from datetime import datetime, timedelta, timezone
-          from cryptography import x509
-          from cryptography.hazmat.primitives import hashes, serialization
-          from cryptography.hazmat.primitives.asymmetric import rsa
-          from cryptography.x509.oid import NameOID
-          from tls_config import install_certificate
-
-          private = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-          now = datetime.now(timezone.utc)
-          name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "*.example.test")])
-          certificate = (x509.CertificateBuilder().subject_name(name).issuer_name(name)
-            .public_key(private.public_key()).serial_number(x509.random_serial_number())
-            .not_valid_before(now-timedelta(days=1)).not_valid_after(now+timedelta(days=2))
-            .add_extension(x509.SubjectAlternativeName([x509.DNSName("*.example.test")]),critical=False)
-            .add_extension(x509.BasicConstraints(ca=False,path_length=None),critical=True)
-            .sign(private,hashes.SHA256()))
-          install_certificate(
-              "/tls", certificate.public_bytes(serialization.Encoding.PEM),
-              private.private_bytes(serialization.Encoding.PEM,serialization.PrivateFormat.PKCS8,serialization.NoEncryption()),
-              "petdiary.example.test")
-          PY
-          for i in $(seq 1 40); do
-            if curl -ksSf --noproxy '*' --resolve petdiary.example.test:4443:127.0.0.1 \
-              https://petdiary.example.test:4443/healthz; then
-              echo "HTTPS Caddy -> PetDiary health check succeeded."
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "HTTPS handshake or reverse proxy did not become ready."
-          exit 1
       - name: Cleanup
         if: always()
         run: docker rm -f petdiary-smoke || true

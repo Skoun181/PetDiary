@@ -1,13 +1,13 @@
-# 🐾 PetDiary 0.0.7 – Develop
+# 🐾 PetDiary 0.0.6
 
 **Self-hosted · Docker · SQLite · Home Assistant**
 
 
 Private, ressourcenschonende Tiergesundheitsakte für den eigenen Docker-Server. Keine Cloud, kein JavaScript-Framework, keine zusätzliche Datenbank. Deutschsprachige Weboberfläche in Mintgrün und Petrol, inspiriert von modernen Tiergesundheits-Apps.
 
-**Status:** Entwicklung 0.0.7 – optionales HTTPS mit eigenem PEM-/Wildcard-Zertifikat über einen getrennten Caddy-Reverse-Proxy. Stable und Docker Hub bleiben bis zur Freigabe auf 0.0.6. Die neuen HTTPS-Funktionen stehen nur im Develop-Image zur Verfügung. Aktuelle Veröffentlichungen und Versions-Tags unter [GitHub Releases](https://github.com/Skoun181/PetDiary/releases) und [Docker Hub](https://hub.docker.com/r/skoun181/petdiary/tags). Ein lokales Administratorkonto pro Installation; keine Mehrbenutzerverwaltung.
+**Status:** Version 0.0.6 – Kostenverwaltung mit mehreren Aktenverknüpfungen pro Rechnung, PDF-Gesundheitsakte und Dark Mode. Aktuelle Veröffentlichungen und Versions-Tags unter [GitHub Releases](https://github.com/Skoun181/PetDiary/releases) und [Docker Hub](https://hub.docker.com/r/skoun181/petdiary/tags). Ein lokales Administratorkonto pro Installation; keine Mehrbenutzerverwaltung.
 
-[📖 Bebilderte Bedienungsanleitung](docs/USER_GUIDE.md) · [🏠 Home Assistant](docs/HOME_ASSISTANT.md) · [📦 Backup und Umzug](docs/BACKUP_MIGRATION.md) · [🔒 HTTPS einrichten](docs/HTTPS.md) · [🔑 Passwort zurücksetzen](docs/PASSWORD_RESET.md) · [Änderungen](CHANGELOG.md)
+[📖 Bebilderte Bedienungsanleitung](docs/USER_GUIDE.md) · [🏠 Home Assistant](docs/HOME_ASSISTANT.md) · [📦 Backup und Umzug](docs/BACKUP_MIGRATION.md) · [🔑 Passwort zurücksetzen](docs/PASSWORD_RESET.md) · [Änderungen](CHANGELOG.md)
 
 ![Gesundheitsakte – schematische Illustration](docs/images/tierakte.svg)
 
@@ -62,24 +62,6 @@ Der Katalog enthält 607 unterschiedliche Bezeichnungen (einschließlich vorhand
 ### Dark Mode
 - Einstellungen → Erscheinungsbild → Design: System, Hell oder Dunkel.
 - Die Auswahl wird im jeweiligen Browser gespeichert. Im Systemmodus folgt die App der Betriebssystemeinstellung.
-
-## HTTPS mit eigenem Wildcard-Zertifikat (Develop 0.0.7)
-
-Über **Einstellungen → HTTPS / TLS-Zertifikat** kannst du für eine konkrete PetDiary-Domain die komplette PEM-Zertifikatskette (z. B. `fullchain.pem`) und den zugehörigen unverschlüsselten privaten PEM-Schlüssel (z. B. `privkey.pem`) hochladen. PetDiary kontrolliert die Domainabdeckung des Zertifikats (auch Wildcard), Gültigkeit und die Übereinstimmung von Zertifikat und privatem Schlüssel. Angezeigt werden ausschließlich die öffentlichen Zertifikatsdaten, das Ablaufdatum und ein SHA-256-Fingerabdruck.
-
-**Wichtig:** TLS wird durch den optionalen **Caddy-Container** umgesetzt. Das Hochladen allein macht den vorhandenen HTTP-Port nicht zu HTTPS. Der TLS-Container startet nach dem ersten Zertifikatsupload und lädt erneuerte Zertifikate automatisch nach. Bei einem bereits vorhandenen Synology-/Nginx-/Traefik-Reverse-Proxy solltest du das Zertifikat stattdessen direkt dort konfigurieren.
-
-**In Dockhand testen:**
-
-1. Externes Datenbackup erstellen und das Develop-Image `ghcr.io/skoun181/petdiary:develop` pullen.
-2. Den **bestehenden** Develop-Stack mit der [HTTPS-Compose-Vorlage](deploy/compose.develop.https.yaml) aktualisieren. Das bisherige Datenvolume `petdiary-develop-data` bleibt erhalten; das neue getrennte Volume `petdiary-develop-tls` enthält ausschließlich Zertifikatsdateien.
-3. PetDiary im vertrauten LAN über `http://SERVER:8081` öffnen, unter Einstellungen den Hostnamen `petdiary.deinedomain.de`, das Fullchain-PEM, den passenden privaten Schlüssel und das aktuelle Passwort angeben.
-4. Über `https://petdiary.deinedomain.de:4443` aufrufen (Port 4443 kann bei freiem Hostport auf 443 geändert werden). DNS, Firewall und CA-Vertrauen müssen passen.
-5. Erst **nach** erfolgreichem HTTPS-Test den direkten HTTP-Port beschränken und `COOKIE_SECURE: "1"` aktivieren.
-
-Der Schlüssel liegt **nicht** in SQLite und ist **nicht** im portablen ZIP-Backup. Er wird in einem getrennten privaten Volume gespeichert, das Caddy nur lesend einbindet. Ein selbst hochgeladenes Zertifikat wird nicht automatisch bei der CA erneuert; neue Dateien müssen vor Ablauf erneut hochgeladen werden.
-
-**[Vollständige Anleitung: DNS, Zertifikat, Synology, Dockhand, Port 443, Schlüssel und Erneuerung](docs/HTTPS.md)**
 
 ## 📦 Backup erstellen, importieren und auf einen anderen Server umziehen (ab 0.0.5)
 

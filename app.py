@@ -14,7 +14,6 @@ from flask import Flask, abort, request, render_template, redirect, url_for, jso
 from io import BytesIO
 from flask import send_file
 from backups import BackupError, MAX_ARCHIVE_BYTES, create_portable_backup, restore_portable_backup
-from tls_config import MAX_PEM_BYTES, MAX_KEY_BYTES, CertificateError, install_certificate, certificate_status
 from finance import COST_SCHEMA, COST_CATEGORIES, parse_cents, euro, input_euro
 from health_report import health_pdf
 from catalog import BREEDS, COLORS, SEX, CHIP_LOCATIONS, TATTOO_LOCATIONS, PRODUCTS, product_suggestions
@@ -51,7 +50,7 @@ CREATE TABLE IF NOT EXISTS dose_checks (record_id INTEGER NOT NULL REFERENCES re
 
 def create_app(config=None):
     app = Flask(__name__)
-    app.config.update(DATA_DIR=os.getenv("DATA_DIR", "/data"), TLS_CERT_DIR=os.getenv("TLS_CERT_DIR",""),
+    app.config.update(DATA_DIR=os.getenv("DATA_DIR", "/data"),
         TZ=os.getenv("TZ","Europe/Berlin"), MAX_CONTENT_LENGTH=55*1024*1024,
         SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Strict",
         SESSION_COOKIE_SECURE=os.getenv("COOKIE_SECURE","0")=="1",
@@ -62,7 +61,6 @@ def create_app(config=None):
     folder = Path(app.config["DATA_DIR"])
     folder.mkdir(parents=True, exist_ok=True)
     path = folder / "petdiary.sqlite3"
-    tls_folder = Path(app.config["TLS_CERT_DIR"] or folder / "tls")
 
     @contextmanager
     def db():
@@ -147,8 +145,6 @@ def create_app(config=None):
         # Override the ordinary 55 MiB upload cap for a validated ZIP restore only.
         if request.endpoint=="backup_import":
             request.max_content_length=MAX_ARCHIVE_BYTES+2*1024*1024
-        if request.endpoint=="tls_upload":
-            request.max_content_length=MAX_PEM_BYTES+MAX_KEY_BYTES+16*1024
         if request.endpoint in ("health","static"):
             return
         if request.path.startswith("/api/"):
@@ -246,33 +242,7 @@ def create_app(config=None):
                 abort(400)
         with db() as con:
             token_active=con.execute("SELECT 1 FROM app_settings WHERE key='api_token_hash'").fetchone() is not None
-        return page("settings",username=account()["username"],token_active=token_active,new_token=new_token,tls_status=certificate_status(tls_folder))
-
-    @app.post("/settings/https/certificate")
-    def tls_upload():
-        """Manage certificate material without ever storing key data in SQLite."""
-        user=account()
-        password=request.form.get("current_password","")
-        if not user or len(password)>256 or not check_password_hash(user["password_hash"],password):
-            flash("Aktuelles Passwort ist falsch.")
-            return redirect(url_for("settings")+"#https",303)
-        certificate=request.files.get("fullchain")
-        private_key=request.files.get("private_key")
-        try:
-            if not certificate or not certificate.filename or not private_key or not private_key.filename:
-                raise CertificateError("Bitte Zertifikatskette und zugehörigen privaten Schlüssel hochladen.")
-            fullchain=certificate.stream.read(MAX_PEM_BYTES+1)
-            key=private_key.stream.read(MAX_KEY_BYTES+1)
-            if len(fullchain)>MAX_PEM_BYTES or len(key)>MAX_KEY_BYTES:
-                raise CertificateError("Die hochgeladenen PEM-Dateien sind zu groß.")
-            metadata=install_certificate(tls_folder,fullchain,key,request.form.get("hostname",""))
-            flash("Zertifikat für "+metadata["hostname"]+" erfolgreich installiert (gültig bis "+metadata["not_after"][:10]+"). Der optionale HTTPS-Proxy muss im Docker-Stack aktiviert sein.")
-        except CertificateError as error:
-            flash(str(error))
-        except OSError:
-            app.logger.exception("TLS certificate store is not writable")
-            flash("Zertifikat konnte nicht gespeichert werden. Bitte das separate TLS-Volume und die Schreibrechte (UID 10001) prüfen.")
-        return redirect(url_for("settings")+"#https",303)
+        return page("settings",username=account()["username"],token_active=token_active,new_token=new_token)
 
     def backup_error(message, status=400):
         if "application/json" in request.headers.get("Accept", ""):
