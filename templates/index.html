@@ -33,6 +33,28 @@
 {% elif screen=='settings' %}
 <p class="eyebrow">DEIN KONTO</p><h1>Einstellungen</h1>
 <section class="card"><h2>Erscheinungsbild</h2><label>Design<select id="theme-choice"><option value="system">System (automatisch)</option><option value="light">Hell</option><option value="dark">Dunkel</option></select></label><p class="muted">Die Auswahl wird in diesem Browser gespeichert.</p></section>
+<section class="card" id="https">
+<h2>🔒 HTTPS / TLS-Zertifikat</h2>
+<p>Installiere ein vorhandenes Zertifikat für deine PetDiary-Domain, beispielsweise ein Wildcard-Zertifikat. PetDiary prüft die Gültigkeit, den Domainnamen und ob der private Schlüssel zum Zertifikat gehört.</p>
+{% if tls_status %}
+<div class="tls-status"><p><strong>Installiertes Zertifikat:</strong> {{ tls_status.hostname }}</p>
+<p class="muted">Gültig bis: <strong>{{ tls_status.not_after[:10] }}</strong>{% if tls_status.expired %} · Abgelaufen!{% elif tls_status.days_remaining < 30 %} · Läuft in {{ tls_status.days_remaining }} Tagen ab{% else %} · Noch {{ tls_status.days_remaining }} Tage{% endif %}</p>
+<p class="muted">DNS-Namen: {{ tls_status.dns_names|join(', ') }} · Zertifikate in der Kette: {{ tls_status.chain_certificates }}</p>
+<p class="muted">SHA-256-Fingerabdruck: <code class="tls-fingerprint">{{ tls_status.fingerprint_sha256 }}</code></p></div>
+{% else %}
+<p class="muted">Noch kein eigenes HTTPS-Zertifikat installiert.</p>
+{% endif %}
+<p class="muted"><strong>Wichtig:</strong> Das Hochladen allein aktiviert noch kein HTTPS. Du brauchst den optionalen Caddy-HTTPS-Container aus der <a href="https://github.com/Skoun181/PetDiary/blob/develop/docs/HTTPS.md" target="_blank" rel="noopener noreferrer">HTTPS-Anleitung</a>. Bei einer Installation hinter Synology Reverse Proxy, Nginx Proxy Manager oder Traefik wird das Zertifikat normalerweise <em>dort</em> hinterlegt; dieser Upload ist dafür nicht notwendig.</p>
+<form method="post" action="{{ url_for('tls_upload') }}" enctype="multipart/form-data">
+{{ csrf_field() }}
+<label>Domain / Hostname für PetDiary *<input type="text" name="hostname" maxlength="253" placeholder="petdiary.example.de" autocomplete="off" required value="{{ tls_status.hostname if tls_status else '' }}"></label>
+<label>Zertifikatskette (fullchain.pem, PEM) *<input type="file" name="fullchain" accept=".pem,.crt,.cer" required></label>
+<label>Zugehöriger privater Schlüssel (privkey.pem, PEM) *<input type="file" name="private_key" accept=".pem,.key" required></label>
+<label>Aktuelles Admin-Passwort *<input type="password" name="current_password" autocomplete="current-password" maxlength="256" required></label>
+<p class="muted">Der Schlüssel muss unverschlüsselt vorliegen. Die Dateien werden mit restriktiven Rechten außerhalb der Datenbank aufbewahrt, nicht im ZIP-Backup exportiert und niemals im Browser zurückgegeben. Verwende diese Upload-Funktion nur bereits über HTTPS oder innerhalb eines vertrauenswürdigen lokalen Netzes.</p>
+<button type="submit">Zertifikat prüfen und sicher speichern</button>
+</form>
+</section>
 <section class="card"><h2>Home Assistant</h2><p>API-Status: <strong>{{ 'Token aktiv' if token_active else 'Kein Token eingerichtet' }}</strong></p><p class="muted">Die API ist nur lesend. Ein neuer Token ersetzt den bisherigen. Bewahre ihn sicher auf; er wird nur nach Erstellung angezeigt.</p>
 {% if new_token %}<label>Neuer API-Token<input readonly value="{{ new_token }}" autocomplete="off" spellcheck="false"></label>{% endif %}
 <label>API-Endpunkt für Erinnerungen<input readonly value="{{ url_for('api_reminders', _external=false) }}?days=365"></label><label>API-Endpunkt für Medikamente<input readonly value="{{ url_for('api_medications', _external=false) }}?days=7"></label>
