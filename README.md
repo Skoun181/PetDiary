@@ -405,3 +405,10 @@ Dauerhafte Branches: `stable` für die veröffentlichte Version, `develop` für 
 
 - [Home Assistant RESTful Sensor](https://www.home-assistant.io/integrations/sensor.rest/)
 - [EU-Heimtierausweis / Reisen mit Haustieren](https://europa.eu/youreurope/citizens/travel/carry/pets-and-other-animals/index_de.htm)
+
+
+### Develop mit vorhandenen Daten testen
+
+Die Develop-Compose-Dateien verwenden das eigene Volume `petdiary-develop-data`. Exportiere in Stable ein portables Backup und importiere es ausschließlich in Develop. Bei einem bereits genutzten Develop-Volume vor dem Upgrade zusätzlich dessen Datenbank per SQLite-Online-Backup sichern. Die Schema-4-Migration ergänzt die bestehenden Tabellen und behält vorhandene Medikamentengaben. Der Import unterstützt auch ZIPs aus Schema 1 bis 3. Für einen Rückstieg auf eine frühere Version die vor dem Upgrade angelegte Kopie verwenden.
+
+Bei einer leeren Develop-Instanz zeigt `docker compose -f deploy/compose.develop.yaml exec petdiary cat /data/setup-token` das einmalige Setup-Token. Alternativ kann ein eigenes langes Token über `PETDIARY_SETUP_TOKEN` im Container gesetzt werden. Für HTTPS am Reverse Proxy `COOKIE_SECURE=1` setzen. Bestehende Konten brauchen kein Setup-Token.

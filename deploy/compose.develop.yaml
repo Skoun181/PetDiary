@@ -5,6 +5,8 @@ services:
     image: ghcr.io/skoun181/petdiary:develop
     container_name: petdiary-develop
     restart: unless-stopped
+    environment:
+      COOKIE_SECURE: ${COOKIE_SECURE:-0}
     ports:
       - "8081:8080"
     volumes:

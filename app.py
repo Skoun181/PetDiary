@@ -4,18 +4,21 @@ import secrets
 import hashlib
 import time
 import threading
+from tempfile import SpooledTemporaryFile
 from werkzeug.security import generate_password_hash, check_password_hash
 import sqlite3
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 from contextlib import contextmanager
 from pathlib import Path
-from flask import Flask, abort, request, render_template, redirect, url_for, jsonify, flash, session
+from flask import Request, Flask, abort, request, render_template, redirect, url_for, jsonify, flash, session
 from io import BytesIO
 from flask import send_file
 from backups import BackupError, MAX_ARCHIVE_BYTES, create_portable_backup, restore_portable_backup
 from finance import COST_SCHEMA, COST_CATEGORIES, parse_cents, euro, input_euro
 from health_report import health_pdf
+from medications import calendar_rows, effective_start
+from migrations import migrate, SCHEMA_VERSION
 from catalog import BREEDS, COLORS, SEX, CHIP_LOCATIONS, TATTOO_LOCATIONS, PRODUCTS, product_suggestions
 
 CATEGORIES = {"visit":"Termin", "vaccine":"Impfung", "exam":"Untersuchung", "lab":"Labor/Befund", "med":"Medikament", "worm":"Entwurmung", "weight":"Gewicht", "food":"Ernährung", "note":"Notiz", "reminder":"Erinnerung", "titer":"Tollwut-Antikörpertest", "parasite":"Parasitenbehandlung"}
@@ -58,9 +61,18 @@ def create_app(config=None):
     if config:
         app.config.update(config)
     tz = ZoneInfo(app.config["TZ"])
+    app.config.setdefault("SETUP_TOKEN", os.getenv("PETDIARY_SETUP_TOKEN", ""))
     folder = Path(app.config["DATA_DIR"])
     folder.mkdir(parents=True, exist_ok=True)
     path = folder / "petdiary.sqlite3"
+    uploads = folder / ".uploads"
+    uploads.mkdir(mode=0o700, exist_ok=True)
+
+    class UploadRequest(Request):
+        def _get_file_stream(self, total_content_length, content_type, filename=None, content_length=None):
+            return SpooledTemporaryFile(max_size=500 * 1024, mode="w+b", dir=uploads)
+
+    app.request_class = UploadRequest
 
     @contextmanager
     def db():
@@ -75,21 +87,12 @@ def create_app(config=None):
             con.close()
 
     with db() as con:
+        if con.execute("PRAGMA user_version").fetchone()[0] > SCHEMA_VERSION:
+            raise RuntimeError("Die Datenbank gehört zu einer neueren PetDiary-Version.")
         con.execute("PRAGMA journal_mode=WAL")
         con.executescript(SCHEMA+COST_SCHEMA)
         con.execute("BEGIN IMMEDIATE")
-        for table, additions in (("pets", ("features","tattoo_location")), ("records", ("dose","dose_unit","duration","dose_times"))):
-            known={row["name"] for row in con.execute("PRAGMA table_info("+table+")")}
-            for col in additions:
-                if col not in known:
-                    con.execute("ALTER TABLE "+table+" ADD COLUMN "+col+" TEXT NOT NULL DEFAULT ''")
-        if "parent_id" not in {row["name"] for row in con.execute("PRAGMA table_info(records)")}:
-            con.execute("ALTER TABLE records ADD COLUMN parent_id INTEGER REFERENCES records(id) ON DELETE CASCADE")
-        con.execute("CREATE INDEX IF NOT EXISTS records_parent ON records(parent_id)")
-        # Migrate the previous single record link without touching the invoice amount.
-        con.execute("INSERT OR IGNORE INTO cost_records(cost_id,record_id) SELECT id,record_id FROM costs WHERE record_id IS NOT NULL")
-        con.execute("UPDATE costs SET record_id=NULL WHERE record_id IS NOT NULL")
-        con.execute("PRAGMA user_version=3")
+        migrate(con)
         con.executemany("INSERT OR IGNORE INTO products(name) VALUES (?)",[(p,) for p in PRODUCTS])
         con.execute("INSERT OR IGNORE INTO app_settings VALUES ('session_secret',?)",(secrets.token_hex(32),))
         app.secret_key=con.execute("SELECT value FROM app_settings WHERE key='session_secret'").fetchone()[0]
@@ -103,10 +106,22 @@ def create_app(config=None):
                 con.execute("INSERT OR IGNORE INTO app_settings VALUES ('api_token_hash',?)",
                             (hashlib.sha256(old_token.encode()).hexdigest(),))
         existing=con.execute("SELECT 1 FROM pets LIMIT 1").fetchone()
-        if existing and not con.execute("SELECT 1 FROM admin_account").fetchone():
+        admin_exists = con.execute("SELECT 1 FROM admin_account").fetchone()
+        if existing and not admin_exists:
             raise RuntimeError("Bestehende Tierdaten ohne Admin-Konto. Beim ersten Upgrade alte ADMIN_USER/ADMIN_PASSWORD einmalig bereitstellen.")
+        if not admin_exists and not app.config["SETUP_TOKEN"]:
+            token_file = folder / "setup-token"
+            try:
+                with os.fdopen(os.open(token_file, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600), "w") as stream:
+                    stream.write(secrets.token_urlsafe(24) + "\n")
+            except FileExistsError:
+                pass
+            app.config["SETUP_TOKEN"] = token_file.read_text().strip()
+            if not app.config["SETUP_TOKEN"]:
+                raise RuntimeError("Die Setup-Token-Datei ist leer.")
     login_lock=threading.Lock()
-    failures=[]
+    failures={}
+    password_slots=threading.BoundedSemaphore(2)
 
     def today():
         return datetime.now(tz).date()
@@ -169,6 +184,9 @@ def create_app(config=None):
     def setup():
         if request.method=="POST":
             try:
+                token=app.config["SETUP_TOKEN"]
+                if token and not equal(request.form.get("setup_token",""),token):
+                    abort(403)
                 username,password=new_credentials()
                 with db() as con:
                     result=con.execute("INSERT OR IGNORE INTO admin_account VALUES (1,?,?,?)",
@@ -180,7 +198,7 @@ def create_app(config=None):
                 return redirect(url_for("home"),303)
             except ValueError as e:
                 flash(str(e))
-        return page("setup")
+        return page("setup", setup_token_required=bool(app.config["SETUP_TOKEN"]))
 
     @app.route("/login",methods=["GET","POST"])
     def login():
@@ -188,18 +206,28 @@ def create_app(config=None):
         if signed_in(a):
             return redirect(url_for("home"),303)
         if request.method=="POST":
+            address = request.remote_addr or "unknown"
             with login_lock:
-                now=time.monotonic()
-                failures[:]=[t for t in failures if now-t<60]
-                if len(failures)>=5:
-                    return page("login",login_error="Zu viele Anmeldeversuche. Bitte in einer Minute erneut versuchen."),429
-                password=request.form.get("password","")
-                username=request.form.get("username","").strip()
-                valid=bool(a and len(password)<=256 and check_password_hash(a["password_hash"],password) and equal(username,a["username"]))
-                if not valid:
-                    failures.append(now)
-                    return page("login",login_error="Benutzername oder Passwort ist falsch."),401
-                failures.clear()
+                now = time.monotonic()
+                for key, (_, expires) in list(failures.items()):
+                    if expires <= now:
+                        del failures[key]
+                attempts, expires = failures.get(address, (0, now + 60))
+                if attempts >= 5 or (address not in failures and len(failures) >= 4096):
+                    return page("login", login_error="Zu viele Anmeldeversuche. Bitte in einer Minute erneut versuchen."),429
+                failures[address] = (attempts + 1, expires)
+            if not password_slots.acquire(blocking=False):
+                return page("login", login_error="Anmeldung ausgelastet. Bitte erneut versuchen."),429
+            try:
+                password = request.form.get("password","")
+                username = request.form.get("username","").strip()
+                valid = bool(a and len(password)<=256 and check_password_hash(a["password_hash"],password) and equal(username,a["username"]))
+            finally:
+                password_slots.release()
+            if not valid:
+                return page("login", login_error="Benutzername oder Passwort ist falsch."),401
+            with login_lock:
+                failures.pop(address, None)
             start_session(a)
             return redirect(url_for("home"),303)
         return page("login")
@@ -354,25 +382,7 @@ def create_app(config=None):
         return {"status":"ok"}
 
     def medication_rows(con, start, end, pid=None):
-        sql="""SELECT r.*, p.name AS pet FROM records r JOIN pets p ON p.id=r.pet_id
-               WHERE r.kind='med' AND r.duration!='' AND r.day<=?"""
-        args=[end.isoformat()]
-        if pid is not None:
-            sql+=" AND r.pet_id=?"
-            args.append(pid)
-        checks={(r["record_id"],r["day"],r["clock"]) for r in con.execute("SELECT * FROM dose_checks WHERE day BETWEEN ? AND ?",(start.isoformat(),end.isoformat()))}
-        result=[]
-        for r in con.execute(sql,args):
-            first=date.fromisoformat(r["day"])
-            last=first+timedelta(days=int(r["duration"])-1)
-            current=max(start,first)
-            while current<=min(end,last):
-                day=current.isoformat()
-                for clock in r["dose_times"].split(","):
-                    moment=datetime.fromisoformat(day+"T"+clock).replace(tzinfo=tz) if clock else None
-                    result.append(dict(id=f'{r["id"]}:{day}:{clock}',record_id=r["id"],entry_id=r["parent_id"] or r["id"],pet_id=r["pet_id"],pet=r["pet"],title=r["title"],product=r["product"],dose=r["dose"],unit=r["dose_unit"],day=day,time=clock,scheduled_at=moment.isoformat() if moment else None,done=(r["id"],day,clock) in checks))
-                current+=timedelta(days=1)
-        return sorted(result,key=lambda r:(r["day"],r["time"],r["pet"],r["record_id"]))
+        return calendar_rows(con, start, end, tz, pid)
 
     @app.get("/api/v1/medications")
     def api_medications():
@@ -400,12 +410,17 @@ def create_app(config=None):
             abort(400)
         with db() as con:
             r=item(con,"records",rid)
-            if r["kind"]!="med" or not r["duration"] or clock not in r["dose_times"].split(",") or not date.fromisoformat(r["day"])<=day<=date.fromisoformat(r["day"])+timedelta(days=int(r["duration"])-1):
-                abort(400)
             if request.form.get("action")=="undo":
                 con.execute("DELETE FROM dose_checks WHERE record_id=? AND day=? AND clock=?",(rid,day.isoformat(),clock))
             elif request.form.get("action")=="mark":
-                con.execute("INSERT OR IGNORE INTO dose_checks VALUES (?,?,?)",(rid,day.isoformat(),clock))
+                if r["kind"]!="med" or not r["duration"] or clock not in r["dose_times"].split(","):
+                    abort(400)
+                first = date.fromisoformat(r["day"])
+                effective = date.fromisoformat(r["schedule_from"] or r["day"])
+                if not max(first, effective) <= day <= first + timedelta(days=int(r["duration"])-1):
+                    abort(400)
+                con.execute("""INSERT OR IGNORE INTO dose_checks(record_id,day,clock,product,dose,dose_unit)
+                               VALUES (?,?,?,?,?,?)""",(rid,day.isoformat(),clock,r["product"],r["dose"],r["dose_unit"]))
             else: abort(400)
         return redirect(url_for("home",week=request.form.get("week",day.isoformat()),pet=request.form.get("pet",""))+"#med-calendar",303)
 
@@ -708,22 +723,23 @@ def create_app(config=None):
                         rid=con.execute("INSERT INTO records (pet_id,"+",".join(RECORD_FIELDS)+") VALUES ("+",".join("?" for _ in range(len(RECORD_FIELDS)+1))+")",[pid,*d.values()]).lastrowid
                     else:
                         done=record["done"] if record["due"]==d["due"] else 0
-                        con.execute("UPDATE records SET "+",".join(k+"=?" for k in RECORD_FIELDS)+",done=? WHERE id=?",[*d.values(),done,rid])
+                        schedule_from=effective_start(con,record,d,today())
+                        con.execute("UPDATE records SET "+",".join(k+"=?" for k in RECORD_FIELDS)+",done=?,schedule_from=? WHERE id=?",[*d.values(),done,schedule_from,rid])
                     if d["product"]:
                         con.execute("INSERT OR IGNORE INTO products(name) VALUES (?)",(d["product"],))
-                    if record.get("id") and any(record.get(k,"")!=d[k] for k in ("kind","day","duration","dose_times","product","dose","dose_unit")):
-                        con.execute("DELETE FROM dose_checks WHERE record_id=?",(rid,))
                     if planned is not None:
                         retained={mid for mid,_ in planned if mid is not None}
                         for mid in existing.keys()-retained:
-                            con.execute("DELETE FROM records WHERE id=? AND parent_id=?",(mid,rid))
+                            if con.execute("SELECT 1 FROM dose_checks WHERE record_id=? LIMIT 1",(mid,)).fetchone():
+                                con.execute("UPDATE records SET duration='',dose_times='' WHERE id=? AND parent_id=?",(mid,rid))
+                            else:
+                                con.execute("DELETE FROM records WHERE id=? AND parent_id=?",(mid,rid))
                         for mid,med in planned:
                             if mid is None:
                                 con.execute("INSERT INTO records (pet_id,parent_id,"+",".join(RECORD_FIELDS)+") VALUES ("+",".join("?" for _ in range(len(RECORD_FIELDS)+2))+")",[pid,rid,*med.values()])
                             else:
-                                con.execute("UPDATE records SET "+",".join(k+"=?" for k in RECORD_FIELDS)+" WHERE id=? AND parent_id=?",[*med.values(),mid,rid])
-                                if any(existing[mid][k]!=med[k] for k in ("day","duration","dose_times","product","dose","dose_unit")):
-                                    con.execute("DELETE FROM dose_checks WHERE record_id=?",(mid,))
+                                schedule_from=effective_start(con,existing[mid],med,today())
+                                con.execute("UPDATE records SET "+",".join(k+"=?" for k in RECORD_FIELDS)+",schedule_from=? WHERE id=? AND parent_id=?",[*med.values(),schedule_from,mid,rid])
                             con.execute("INSERT OR IGNORE INTO products(name) VALUES (?)",(med["product"],))
                     con.executemany("INSERT INTO attachments(record_id,name,mime,data) VALUES (?,?,?,?)",[(rid,*f) for f in uploads])
                     return redirect(url_for("pet_detail",pid=pid),303)
@@ -788,7 +804,7 @@ def create_app(config=None):
 
     @app.errorhandler(413)
     def too_large(e):
-        return "Upload zu groß (max. 55 MB pro Anfrage).",413
+        return "Backup-ZIP zu groß (max. 256 MiB)." if request.endpoint=="backup_import" else "Upload zu groß (max. 55 MiB pro Anfrage).",413
 
     return app
 

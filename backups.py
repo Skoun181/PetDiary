@@ -18,10 +18,11 @@ import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
+from migrations import PLAN_COLUMNS, SCHEMA_VERSION, hydrate_dose_history
+
 LOG = logging.getLogger(__name__)
 BACKUP_FORMAT = "petdiary-portable"
 FORMAT_VERSION = 1
-SCHEMA_VERSION = 3
 MAX_ARCHIVE_BYTES = 256 * 1024 * 1024
 MAX_DATABASE_BYTES = 1024 * 1024 * 1024
 MAX_MANIFEST_BYTES = 32768
@@ -30,7 +31,7 @@ MAX_SAFETY_BACKUPS = 5
 LEGACY_TABLES = ("pets", "records", "pet_photos", "attachments", "products", "dose_checks")
 SCHEMA2_TABLES = LEGACY_TABLES + ("costs",)
 BACKUP_TABLES = SCHEMA2_TABLES + ("cost_records",)
-TABLES_BY_VERSION = {1: LEGACY_TABLES, 2: SCHEMA2_TABLES, 3: BACKUP_TABLES}
+TABLES_BY_VERSION = {1: LEGACY_TABLES, 2: SCHEMA2_TABLES, 3: BACKUP_TABLES, 4: BACKUP_TABLES}
 DELETE_ORDER = ("cost_records", "costs", "dose_checks", "attachments", "pet_photos", "records", "pets", "products")
 BACKUP_MEMBERS = {"manifest.json", "petdiary.sqlite3"}
 SAFETY_FOLDER = ".petdiary-safety-backups"
@@ -105,10 +106,12 @@ def _verify_tables(source, destination):
         raise BackupError("Die Sicherung enthält unerwartete Datenbankobjekte.")
     if source.execute("PRAGMA user_version").fetchone()[0] not in TABLES_BY_VERSION:
         raise BackupError("Die SQLite-Schema-Version ist nicht kompatibel.")
+    version = source.execute("PRAGMA user_version").fetchone()[0]
     for table in tables:
         incoming = {row[1] for row in source.execute("PRAGMA table_info(" + table + ")")}
         installed = {row[1] for row in destination.execute("PRAGMA table_info(" + table + ")")}
-        if not incoming or incoming != installed:
+        expected = installed - set(PLAN_COLUMNS.get(table, {})) if version < 4 else installed
+        if not incoming or incoming != expected:
             raise BackupError("Die Datenbankstruktur ist nicht kompatibel (Tabelle " + table + ").")
     for table in ("app_settings", "admin_account"):
         if source.execute("SELECT COUNT(*) FROM " + table).fetchone()[0]:
@@ -152,7 +155,9 @@ def create_portable_backup(database, data_dir, app_version):
                 sanitizing.execute("DELETE FROM app_settings")
                 # Support older offline snapshots, including single-link schema 2.
                 names = {row[0] for row in sanitizing.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-                schema_version = 3 if "cost_records" in names else 2 if "costs" in names else 1
+                schema_version = sanitizing.execute("PRAGMA user_version").fetchone()[0]
+                if schema_version == 0:
+                    schema_version = 3 if "cost_records" in names else 2 if "costs" in names else 1
                 sanitizing.execute("PRAGMA user_version=" + str(schema_version))
                 counts = _counts(sanitizing, _source_tables(sanitizing))
         finally:
@@ -282,41 +287,35 @@ def _safety_backup(database, data_dir):
         raise
 
 
-def _replace_data(source, database, default_products):
-    destination = _connect(database)
-    try:
-        with destination:
-            destination.execute("BEGIN IMMEDIATE")
-            destination.execute("PRAGMA defer_foreign_keys=ON")
-            for table in DELETE_ORDER:
-                destination.execute("DELETE FROM " + table)
-            # Keep IDs and relationships for linked records, photos, attachments and doses.
-            for table in _source_tables(source):
-                columns = [row[1] for row in source.execute("PRAGMA table_info(" + table + ")")]
-                names = ",".join('"' + c + '"' for c in columns)
-                marks = ",".join("?" for _ in columns)
-                cursor = source.execute("SELECT " + names + " FROM " + table)
-                while True:
-                    rows = cursor.fetchmany(128)
-                    if not rows:
-                        break
-                    destination.executemany("INSERT INTO " + table + " (" + names + ") VALUES (" + marks + ")", rows)
-            destination.executemany("INSERT OR IGNORE INTO products(name) VALUES (?)", ((p,) for p in default_products))
-            if destination.execute("SELECT 1 FROM costs c JOIN records r ON r.id=c.record_id WHERE c.pet_id!=r.pet_id OR r.parent_id IS NOT NULL").fetchone():
-                raise BackupError("Kosten enthalten ungültige Aktenverknüpfungen.")
-            # Convert legacy single links to the new many-to-many table.
-            destination.execute("INSERT OR IGNORE INTO cost_records(cost_id,record_id) SELECT id,record_id FROM costs WHERE record_id IS NOT NULL")
-            destination.execute("UPDATE costs SET record_id=NULL WHERE record_id IS NOT NULL")
-            if destination.execute("SELECT 1 FROM cost_records cr JOIN costs c ON c.id=cr.cost_id JOIN records r ON r.id=cr.record_id WHERE c.pet_id!=r.pet_id OR r.parent_id IS NOT NULL").fetchone():
-                raise BackupError("Kosten enthalten ungültige Aktenverknüpfungen.")
-            if destination.execute("PRAGMA foreign_key_check").fetchone():
-                raise BackupError("Der Import hat ungültige Referenzen. Die Änderungen wurden zurückgerollt.")
-            if destination.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
-                raise BackupError("Die Datenbankprüfung schlug fehl. Die Änderungen wurden zurückgerollt.")
-            return _counts(destination)
-    finally:
-        destination.close()
-
+def _replace_data(source, destination, default_products):
+    destination.execute("PRAGMA defer_foreign_keys=ON")
+    for table in DELETE_ORDER:
+        destination.execute("DELETE FROM " + table)
+    # Keep IDs and relationships for linked records, photos, attachments and doses.
+    for table in _source_tables(source):
+        columns = [row[1] for row in source.execute("PRAGMA table_info(" + table + ")")]
+        names = ",".join('"' + c + '"' for c in columns)
+        marks = ",".join("?" for _ in columns)
+        cursor = source.execute("SELECT " + names + " FROM " + table)
+        while True:
+            rows = cursor.fetchmany(128)
+            if not rows:
+                break
+            destination.executemany("INSERT INTO " + table + " (" + names + ") VALUES (" + marks + ")", rows)
+    hydrate_dose_history(destination)
+    destination.executemany("INSERT OR IGNORE INTO products(name) VALUES (?)", ((p,) for p in default_products))
+    if destination.execute("SELECT 1 FROM costs c JOIN records r ON r.id=c.record_id WHERE c.pet_id!=r.pet_id OR r.parent_id IS NOT NULL").fetchone():
+        raise BackupError("Kosten enthalten ungültige Aktenverknüpfungen.")
+    # Convert legacy single links to the new many-to-many table.
+    destination.execute("INSERT OR IGNORE INTO cost_records(cost_id,record_id) SELECT id,record_id FROM costs WHERE record_id IS NOT NULL")
+    destination.execute("UPDATE costs SET record_id=NULL WHERE record_id IS NOT NULL")
+    if destination.execute("SELECT 1 FROM cost_records cr JOIN costs c ON c.id=cr.cost_id JOIN records r ON r.id=cr.record_id WHERE c.pet_id!=r.pet_id OR r.parent_id IS NOT NULL").fetchone():
+        raise BackupError("Kosten enthalten ungültige Aktenverknüpfungen.")
+    if destination.execute("PRAGMA foreign_key_check").fetchone():
+        raise BackupError("Der Import hat ungültige Referenzen. Die Änderungen wurden zurückgerollt.")
+    if destination.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+        raise BackupError("Die Datenbankprüfung schlug fehl. Die Änderungen wurden zurückgerollt.")
+    return _counts(destination)
 
 def restore_portable_backup(file, database, data_dir, default_products):
     """Validate first, take a safety backup, then replace only application tables.
@@ -346,13 +345,18 @@ def restore_portable_backup(file, database, data_dir, default_products):
             actual = _counts(source, _source_tables(source))
             if actual != manifest["counts"]:
                 raise BackupError("Die Anzahl der Datensätze stimmt nicht mit den Backup-Metadaten überein.")
-            # Only after full validation: back up the original, including its credentials.
-            safety = _safety_backup(database, data_dir)
+            destination = _connect(database)
             try:
-                counts = _replace_data(source, database, default_products)
+                with destination:
+                    destination.execute("BEGIN IMMEDIATE")
+                    # Hold SQLite's writer lock across the snapshot and data replacement.
+                    safety = _safety_backup(database, data_dir)
+                    counts = _replace_data(source, destination, default_products)
             except Exception:
-                LOG.exception("Data import rolled back; internal safety backup retained")
+                LOG.exception("Data import rolled back")
                 raise
+            finally:
+                destination.close()
         finally:
             source.close()
         LOG.info("Portable restore complete: pets=%d records=%d attachments=%d",

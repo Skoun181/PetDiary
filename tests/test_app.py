@@ -2,8 +2,17 @@ import base64
 import io
 import tempfile
 import unittest
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
+from pathlib import Path
 from app import create_app
+from migrations import PLAN_COLUMNS
+
+def drop_plan_columns(con):
+    for table, columns in PLAN_COLUMNS.items():
+        for column in columns:
+            con.execute(f"ALTER TABLE {table} DROP COLUMN {column}")
+
 
 class PetDiaryTest(unittest.TestCase):
     def setUp(self):
@@ -14,7 +23,11 @@ class PetDiaryTest(unittest.TestCase):
         self.password="test-password-123"
         self.auth={}
         self.refresh_csrf(self.client,"/setup")
-        r=self.post("/setup",username="admin",password=self.password,confirm_password=self.password)
+        self.assertEqual(self.post("/setup", username="admin", password=self.password,
+                                   confirm_password=self.password).status_code, 403)
+        token=(Path(self.tmp.name)/"setup-token").read_text().strip()
+        r=self.post("/setup",username="admin",password=self.password,
+                    confirm_password=self.password,setup_token=token)
         self.assertEqual(r.status_code,303)
         self.refresh_csrf(self.client,"/")
         r=self.post("/settings",action="generate",current_password=self.password)
@@ -164,6 +177,22 @@ class PetDiaryTest(unittest.TestCase):
         self.assertIn(b"Recovery",self.client.get("/").data)
         self.assertIn(b"Behalten",self.client.get(a).data)
         self.assertEqual(self.client.get("/api/v1/reminders",headers=self.api).status_code,200)
+
+    def test_plan_edit_preserves_documented_dose_and_uses_new_schedule(self):
+        current = datetime.now(ZoneInfo("Europe/Berlin")).date()
+        pid = self.pet("Aufbewahrung")
+        plan = dict(kind="med", title="Plan", day=current.isoformat(), product="Präparat A",
+                    dose="1", dose_unit="ml", duration="3", dose_clock="08:00")
+        self.assertEqual(self.post(pid+"/records/new", **plan).status_code, 303)
+        url = f"/api/v1/medications?start={current.isoformat()}&days=3"
+        rid = self.client.get(url, headers=self.api).json["medications"][0]["record_id"]
+        self.assertEqual(self.post(f"/medications/{rid}/check", day=current.isoformat(),
+                                   clock="08:00", action="mark").status_code, 303)
+        self.assertEqual(self.post(f"{pid}/records/{rid}/edit",
+                                   **{**plan, "dose":"2", "dose_clock":"09:00"}).status_code, 303)
+        rows = self.client.get(url, headers=self.api).json["medications"]
+        self.assertEqual([(r["time"],r["dose"],r["done"]) for r in rows],
+                         [("08:00","1",True),("09:00","2",False),("09:00","2",False)])
 
     def test_given_medication_without_clock_duration(self):
         p=self.pet()
@@ -316,7 +345,7 @@ class PetDiaryTest(unittest.TestCase):
             self.assertEqual(set(archive.namelist()),{"manifest.json","petdiary.sqlite3"})
             meta=json.loads(archive.read("manifest.json"))
             raw=archive.read("petdiary.sqlite3")
-            self.assertEqual(meta["schema_version"],3)
+            self.assertEqual(meta["schema_version"],4)
             self.assertEqual(meta["app_version"],"0.0.6")
             self.assertEqual(hashlib.sha256(raw).hexdigest(),meta["database_sha256"])
             self.assertEqual(meta["counts"]["attachments"],1)
@@ -331,7 +360,7 @@ class PetDiaryTest(unittest.TestCase):
                 self.assertEqual(con.execute("SELECT count(*) FROM admin_account").fetchone()[0],0)
                 self.assertEqual(con.execute("SELECT count(*) FROM app_settings").fetchone()[0],0)
                 self.assertEqual(con.execute("SELECT count(*) FROM attachments").fetchone()[0],1)
-                self.assertEqual(con.execute("PRAGMA user_version").fetchone()[0],3)
+                self.assertEqual(con.execute("PRAGMA user_version").fetchone()[0],4)
         with tempfile.TemporaryDirectory() as newdir:
             newapp=create_app(dict(TESTING=True,DATA_DIR=newdir))
             other=newapp.test_client()
@@ -339,7 +368,7 @@ class PetDiaryTest(unittest.TestCase):
             with other.session_transaction() as sess:
                 csrftoken=sess["csrf"]
             newpass="different-admin-pass123"
-            self.assertEqual(other.post("/setup",data={"csrf":csrftoken,"username":"different",
+            self.assertEqual(other.post("/setup",data={"csrf":csrftoken,"setup_token":(Path(newdir)/"setup-token").read_text().strip(),"username":"different",
                 "password":newpass,"confirm_password":newpass}).status_code,303)
             # Creating the session rotates the CSRF secret.
             other.get("/settings")
@@ -425,16 +454,9 @@ class PetDiaryTest(unittest.TestCase):
         self.pet("Vorher")
         exported=self.make_portable_backup()
         # Simulate an unexpected failure while replacing rows.
-        original=backups._replace_data
-        def fail_after_delete(source,database,default_products):
-            dest=sqlite3.connect(database)
-            try:
-                with dest:
-                    dest.execute("PRAGMA foreign_keys=ON")
-                    dest.execute("DELETE FROM pets")
-                    raise sqlite3.IntegrityError("forced failure")
-            finally:
-                dest.close()
+        def fail_after_delete(source,destination,default_products):
+            destination.execute("DELETE FROM pets")
+            raise sqlite3.IntegrityError("forced failure")
         from unittest.mock import patch
         with patch("backups._replace_data",side_effect=fail_after_delete):
             response=self.client.post("/settings/backups/import",
@@ -513,6 +535,7 @@ class PetDiaryTest(unittest.TestCase):
         with dst:
             dst.execute("DROP TABLE cost_records")
             dst.execute("UPDATE costs SET record_id=1")
+            drop_plan_columns(dst)
             dst.execute("PRAGMA user_version=2")
         dst.close()
         temporary,archive,_=create_portable_backup(legacy,root,"0.0.6")
@@ -561,6 +584,7 @@ class PetDiaryTest(unittest.TestCase):
         with dest:
             dest.execute("DROP TABLE cost_records")
             dest.execute("DROP TABLE costs")
+            drop_plan_columns(dest)
             dest.execute("PRAGMA user_version=1")
         dest.close()
         temporary,archive,counts=create_portable_backup(legacy,root,"0.0.5")
